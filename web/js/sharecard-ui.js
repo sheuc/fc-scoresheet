@@ -112,7 +112,7 @@ export function initShareCard() {
       if (mine !== token) return;
       state.blob = blob; state.fileName = `fc-recap-${slug(model.title)}.png`;
       ["card-download", "card-share", "card-copy"].forEach(id => { $(id).disabled = false; });
-    } catch { note.textContent = "Couldn't create the image in this browser."; }
+    } catch { note.textContent = "Couldn't create the image."; }
   }
 
   // ---- the controls (they change the card live; Cancel puts everything back, Save keeps it)
@@ -210,7 +210,7 @@ export function initShareCard() {
   $("card-share").hidden = !(typeof navigator.share === "function" && typeof navigator.canShare === "function" && typeof File === "function");
   $("card-share").addEventListener("click", async () => {
     if (!state.blob) return;
-    if (!canShare()) { note.textContent = "Sharing isn't available here (it needs https on a phone). Use Download instead."; return; }
+    if (!canShare()) { note.textContent = "Sharing isn't available here. Use Download instead."; return; }
     try { await navigator.share({ files: [fileOf()], title: canvas.dataset.title }); }
     catch (e) { if (e?.name !== "AbortError") note.textContent = "Couldn't open the share sheet. Use Download instead."; }
   });

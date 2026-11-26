@@ -672,7 +672,6 @@ button.primary:disabled { box-shadow: none; }
 }
 
 /* ---- client-side build additions ---- */
-.privacy { display: block; margin-top: 2px; opacity: .85; }
 .progress-row { display: flex; align-items: center; gap: 12px; }
 .progress-row .progress { flex: 1; }
 .btn-cancel { flex: none; padding: 4px 12px; border-radius: 8px; border: 1px solid var(--border, #3a4660); background: transparent; color: inherit; cursor: pointer; font: inherit; }
