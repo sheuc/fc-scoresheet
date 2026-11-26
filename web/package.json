@@ -1,0 +1,19 @@
+{
+  "name": "fc-stat-tracker-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "FC Scoresheet: turn FC Mobile match screenshots into a goal tally, stats and a share card. 100% client-side.",
+  "type": "module",
+  "scripts": {
+    "vendor": "node scripts/vendor.mjs",
+    "serve": "node scripts/serve.mjs",
+    "build": "node scripts/build.mjs"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "tesseract.js": "^6.0.1"
+  },
+  "devDependencies": {
+    "@tesseract.js-data/eng": "^1.0.0"
+  }
+}

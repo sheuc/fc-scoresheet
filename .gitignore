@@ -1,0 +1,40 @@
+# dependencies and environments
+node_modules/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# generated: rebuilt by `npm run vendor` / `npm run build`
+web/vendor/
+web/dist/
+web/tests/out/
+
+# runtime data from the old Python app
+uploads/
+generated/
+results.xlsx
+
+# real game screenshots: may show other players' names, and ~150 MB. Kept local only.
+samples/
+
+# private copies of test fixtures (real opponent usernames)
+*.local.json
+
+# editor / OS
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Not published: only what is needed to run, build and deploy the app lives in the repo.
+# (These stay on the developer's disk.)
+/app.py
+/utils.py
+/services/
+/frontend/
+/tests/
+/pytest.ini
+/requirements*.txt
+/web/tests/
+/web/scripts/make-logo-template.mjs
+/web/README.md
