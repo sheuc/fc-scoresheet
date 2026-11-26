@@ -181,6 +181,10 @@
       </div>
     </section>
 
+    <footer class="app-footer">
+      <button id="report-open" type="button" class="link-btn" aria-haspopup="dialog"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2l1.9 1.9M16 2l-1.9 1.9"/><path d="M9 7.1V6a3 3 0 0 1 6 0v1.1"/><path d="M12 20a6 6 0 0 1-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3a6 6 0 0 1-6 6z"/><path d="M12 20v-9M6 13H2M22 13h-4M6.5 18.5L3.5 20.5M17.5 18.5l3 2"/></svg>Report a bug</button>
+    </footer>
+
   </div>
 
   <!-- Card editor: a full-screen sheet (Cancel / Save, the live card, tabs along the bottom) -->
@@ -239,9 +243,26 @@
     </div>
   </div>
 
+  <!-- Report a bug -->
+  <div id="report-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="report-title" hidden>
+    <div class="modal-card">
+      <h2 id="report-title">Report a bug</h2>
+      <label for="report-text" class="field-label">What went wrong?</label>
+      <textarea id="report-text" rows="5" maxlength="2000" placeholder="e.g. A goal was read as the wrong player, or a button did nothing."></textarea>
+      <label class="check"><input type="checkbox" id="report-include" checked> Include details that help me fix it</label>
+      <pre id="report-details" class="report-details"></pre>
+      <p class="small">This opens a ready-to-send report on GitHub, where you can read it and submit it. It is public, so please leave out personal info. You can drag a screenshot into the report there.</p>
+      <div class="modal-actions">
+        <button id="report-cancel" type="button" class="btn-cancel">Cancel</button>
+        <button id="report-send" type="button" class="primary" disabled>Continue to GitHub</button>
+      </div>
+    </div>
+  </div>
+
   <noscript><div class="container"><div class="error is-visible">This app needs JavaScript.</div></div></noscript>
   <script src="vendor/tesseract/tesseract.min.js"></script>
   <script src="vendor/exceljs/exceljs.min.js"></script>
+  <script type="module" src="js/report.js"></script>
   <script type="module" src="js/app.js"></script>
   <script type="module" src="js/ui.js"></script>
 </body>
