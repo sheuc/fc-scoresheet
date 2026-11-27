@@ -23,6 +23,10 @@ export function workerCount() {
   return Math.min(4, Math.max(1, Math.floor((navigator.hardwareConcurrency || 4) / 2)));
 }
 
+/** A phone screenshot is about 2 megapixels. Anything over this (a camera photo, a panorama) is skipped: decoding it can
+ *  exhaust a phone's memory, and iOS Safari refuses canvases this large anyway. */
+const MAX_PIXELS = 36e6;
+
 /** Decode an image File to RGBA pixels. The embedded colour profile is ignored on purpose:
  *  the colour thresholds were tuned on the raw pixel values (phone screenshots are often Display P3). */
 export async function decodeImage(file) {
@@ -33,6 +37,7 @@ export async function decodeImage(file) {
     bmp = await createImageBitmap(file);      // browsers without the option
   }
   const { width, height } = bmp;
+  if (width * height > MAX_PIXELS) { bmp.close(); throw Object.assign(new Error("image too large"), { code: "TOO_LARGE" }); }
   const canvas = typeof OffscreenCanvas !== "undefined"
     ? new OffscreenCanvas(width, height)
     : Object.assign(document.createElement("canvas"), { width, height });

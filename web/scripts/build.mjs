@@ -11,7 +11,7 @@ if (!existsSync(join(root, "vendor", "tesseract", "lang", "eng.traineddata"))) {
 }
 rmSync(dist, { recursive: true, force: true });
 mkdirSync(dist, { recursive: true });
-for (const f of ["index.html", "styles.css", "sw.js", "manifest.webmanifest", "icon.svg", "js", "vendor", "fonts"]) {
+for (const f of ["index.html", "styles.css", "sw.js", "manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png", "apple-touch-icon.png", "js", "vendor", "fonts"]) {
   cpSync(join(root, f), join(dist, f), { recursive: true });
 }
 console.log("dist/ ready");

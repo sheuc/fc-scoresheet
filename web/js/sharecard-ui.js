@@ -199,18 +199,32 @@ export function initShareCard() {
 
   // ---- download / share / copy
   const touch = !!(window.matchMedia && (matchMedia("(pointer: coarse)").matches || matchMedia("(hover: none)").matches));
-  const saveWord = touch ? "Save to device" : "Download";
-  if (touch) { const b = $("card-download"); if (b.lastChild && b.lastChild.nodeType === 3) b.lastChild.textContent = " Save to device"; }
-  $("card-download").addEventListener("click", () => {
-    if (!state.blob) return;
+  const fileOf = () => new File([state.blob], state.fileName, { type: "image/png" });
+  const canShare = () => typeof navigator.canShare === "function" && typeof navigator.share === "function" && state.blob && navigator.canShare({ files: [fileOf()] });
+  const sheetExists = typeof navigator.share === "function" && typeof navigator.canShare === "function" && typeof File === "function";
+  // A web page can't write to Photos itself; the share sheet's "Save Image" does. So on a phone the save button opens that sheet.
+  // Without a share sheet (or if it fails) it falls back to downloading the PNG.
+  const toPhotos = touch && sheetExists;
+  const saveWord = toPhotos ? "Save to Photos" : touch ? "Save to device" : "Download";
+  if (touch) { const b = $("card-download"); if (b.lastChild && b.lastChild.nodeType === 3) b.lastChild.textContent = ` ${saveWord}`; }
+  function downloadFile() {
     const url = URL.createObjectURL(state.blob), a = document.createElement("a");
     a.href = url; a.download = state.fileName; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
-    note.textContent = touch ? "Saved to your device." : "Saved to your downloads.";
+  }
+  $("card-download").addEventListener("click", async () => {
+    if (!state.blob) return;
+    if (toPhotos && canShare()) {
+      note.textContent = "In the sheet that opens, choose Save Image to add the card to Photos.";
+      try { await navigator.share({ files: [fileOf()], title: canvas.dataset.title }); note.textContent = "Done. If you chose Save Image, the card is in Photos."; return; }
+      catch (e) {
+        if (e?.name === "AbortError") { note.textContent = ""; return; }                    // closed the sheet: not an error
+        note.textContent = "Couldn't open the share sheet, so the card was saved as a file instead.";
+      }
+    } else note.textContent = touch ? "Saved to your device." : "Saved to your downloads.";
+    downloadFile();
   });
-  const fileOf = () => new File([state.blob], state.fileName, { type: "image/png" });
-  const canShare = () => typeof navigator.canShare === "function" && typeof navigator.share === "function" && state.blob && navigator.canShare({ files: [fileOf()] });
-  $("card-share").hidden = !(typeof navigator.share === "function" && typeof navigator.canShare === "function" && typeof File === "function");
+  $("card-share").hidden = !sheetExists || toPhotos;                  // on a phone the save button already opens the share sheet
   $("card-share").addEventListener("click", async () => {
     if (!state.blob) return;
     if (!canShare()) { note.textContent = `Sharing isn't available here. Use ${saveWord} instead.`; return; }

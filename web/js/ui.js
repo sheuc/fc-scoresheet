@@ -7,6 +7,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function applyTheme(theme) {
     root.setAttribute("data-theme", theme);
+    const bar = document.querySelector('meta[name="theme-color"]');       // the phone's status bar follows the theme
+    if (bar) bar.setAttribute("content", theme === "light" ? "#eef2f9" : "#0b1220");
     if (toggle) {
       const next = theme === "dark" ? "light" : "dark";
       toggle.setAttribute("aria-label", `Switch to ${next} mode`);
@@ -23,6 +25,18 @@ document.addEventListener("DOMContentLoaded", () => {
       applyTheme(next);
       try { localStorage.setItem("fc-theme", next); } catch (e) { /* storage unavailable */ }
     });
+  }
+
+  // ---------- full-screen sheets (card editor, bug report) follow the *visible* viewport ----------
+  // On iOS the on-screen keyboard covers the page without resizing it; --vvh / --vvt keep the sheets above the keyboard.
+  const vv = window.visualViewport;
+  if (vv) {
+    const sync = () => {
+      const s = document.documentElement.style;
+      if (vv.scale > 1.01) { s.removeProperty("--vvh"); s.removeProperty("--vvt"); return; }      // pinch-zoomed: leave the layout alone
+      s.setProperty("--vvh", `${vv.height}px`); s.setProperty("--vvt", `${vv.offsetTop}px`);
+    };
+    vv.addEventListener("resize", sync); vv.addEventListener("scroll", sync); sync();
   }
 
   // ---------- dropzones: drag highlight + "N files selected" ----------

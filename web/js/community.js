@@ -65,6 +65,9 @@ export async function contribute(c) {
   } catch { return false; }
 }
 
+// Names come from a sheet anyone can add to: cut absurdly long words (they would widen a phone screen) and the whole name.
+const cleanShown = name => String(name ?? "").replace(/\S{21,}/g, m => `${m.slice(0, 20)}\u2026`).slice(0, 60);
+
 // The shared totals, or null if they can't be read right now.
 export async function loadTotals() {
   if (!communityEnabled()) return null;
@@ -72,6 +75,6 @@ export async function loadTotals() {
     const res = await fetch(url(), { cache: "no-store" });
     const d = await res.json();
     if (!res.ok || !d || d.ok !== true) return null;
-    return { games: Number(d.games) || 0, goals: Number(d.goals) || 0, scorers: Array.isArray(d.scorers) ? d.scorers.slice(0, 10) : [] };
+    return { games: Number(d.games) || 0, goals: Number(d.goals) || 0, scorers: Array.isArray(d.scorers) ? d.scorers.slice(0, 10).map(s => ({ name: cleanShown(s?.name), goals: Number(s?.goals) || 0 })) : [] };
   } catch { return null; }
 }

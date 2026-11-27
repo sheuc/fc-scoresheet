@@ -16,6 +16,7 @@ const GAMES_HEADER = ["Saved", "Opponent", "Goals for", "Goals against", "Key"];
 const STATS_HEADER = ["Saved", "Opponent", "Score", "Shots", "On target", "Possession %", "Pass accuracy %", "Fouls", "Offsides",
                       "Opp shots", "Opp on target", "Opp possession %", "Opp pass accuracy %", "Opp fouls", "Opp offsides", "Key"];
 
+const MAX_NAMES = 1000;                       // how many player names an uploaded sheet can fill in
 export const MAX_SHEET_BYTES = 5 * 1024 * 1024;   // a results spreadsheet is tiny; refuse anything big
 const BAD_SHEET = "Couldn't read that spreadsheet. Please upload an .xlsx or .csv file.";
 
@@ -60,8 +61,16 @@ export function guessNameColumn(headers) {
   return /[a-z]/i.test(String(headers[0] || "")) ? 0 : null;
 }
 
+/** Comma, semicolon (Excel in many European locales) or tab: whichever the header line uses most. */
+function detectDelimiter(text) {
+  const line = String(text).replace(/^\uFEFF/, "").split(/\r?\n/, 1)[0] || "";
+  let best = ",", most = 0;
+  for (const d of [",", ";", "\t"]) { const n = line.split(d).length - 1; if (n > most) { best = d; most = n; } }
+  return best;
+}
+
 /** Minimal RFC-4180 CSV parser (quotes, escaped quotes, CRLF, BOM). */
-export function parseCsv(text) {
+export function parseCsv(text, delim = detectDelimiter(text)) {
   const rows = [];
   let row = [], field = "", quoted = false;
   text = text.replace(/^﻿/, "");
@@ -71,7 +80,7 @@ export function parseCsv(text) {
       if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else quoted = false; }
       else field += c;
     } else if (c === '"') quoted = true;
-    else if (c === ",") { row.push(field); field = ""; }
+    else if (c === delim) { row.push(field); field = ""; }
     else if (c === "\n" || c === "\r") {
       if (c === "\r" && text[i + 1] === "\n") i++;
       row.push(field); field = ""; rows.push(row); row = [];
@@ -123,10 +132,11 @@ function namesFromRows(rows) {
 export async function readNamesFromSheet(data, filename) {
   const isCsv = String(filename).toLowerCase().endsWith(".csv");
   const wb = await loadWorkbook(data, filename);
-  const ws = wb.worksheets.find(w => !HELPER_SHEETS.has(w.name)) || wb.worksheets[0];
-  const rows = ws ? sheetRows(ws, 100) : [];
+  const plainSheet = w => !HELPER_SHEETS.has(w.name);
+  const ws = wb.worksheets.find(w => plainSheet(w) && w.state === "visible") || wb.worksheets.find(plainSheet) || wb.worksheets[0];   // the sheet a save would update
+  const rows = ws ? sheetRows(ws, MAX_NAMES + 1) : [];
   if (!rows.length) throw new Error("File is empty");
-  return { names: namesFromRows(rows).slice(0, 100), orig_name: filename, is_csv: isCsv };
+  return { names: namesFromRows(rows).slice(0, MAX_NAMES), orig_name: filename, is_csv: isCsv };
 }
 
 /** Goals already recorded in the workbook's hidden log (as comparable dicts). */

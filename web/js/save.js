@@ -8,7 +8,7 @@ import { normalize } from "./text.js";
  * @param known     goals already in the user's spreadsheet (readKnownGoals), [] for a new one
  * @param excluded  Set of players removed with the trash button
  * @param reduced   {player: n} goals subtracted with "-"
- * @returns {counts, logGoals, theirGoals, statRecords, gameRecords, skipped, gameIds, problem}
+ * @returns {counts, logGoals, shareGoals, theirGoals, statRecords, gameRecords, skipped, gameIds, problem}
  *          `problem` is a message when there is nothing to save, else null
  */
 export function buildSave(data, known = [], excluded = new Set(), reduced = {}) {
@@ -65,11 +65,19 @@ export function buildSave(data, known = [], excluded = new Set(), reduced = {}) 
     if (counts[name] === 0) delete counts[name];
   }
 
+  // What may go to the community totals: the saved goals minus any the user subtracted with "-" (an own goal, a non-team
+  // player): those are not theirs, and the spreadsheet totals leave them out too.
+  const shareGoals = [...logGoals];
+  for (const [name, n] of Object.entries(reduced)) {
+    let left = n;
+    for (let i = shareGoals.length - 1; i >= 0 && left > 0; i--) if (shareGoals[i].matched_name === name) { shareGoals.splice(i, 1); left--; }
+  }
+
   let problem = null;
   if (!logGoals.length && !statRecords.length && !theirGoals.length && !gameRecords.length) {
     problem = "Nothing new to save: every goal is already in your spreadsheet or was removed.";
   } else if (!Object.keys(counts).length && !statRecords.length && !gameRecords.length) {
     problem = "Nothing to save: every goal was subtracted or removed.";
   }
-  return { counts, logGoals, theirGoals, statRecords, gameRecords, skipped, gameIds, problem };
+  return { counts, logGoals, shareGoals, theirGoals, statRecords, gameRecords, skipped, gameIds, problem };
 }

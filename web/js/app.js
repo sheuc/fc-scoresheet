@@ -12,9 +12,12 @@ import { buildContribution, communityEnabled, contribute, getOptIn, loadTotals, 
 
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const $ = id => document.getElementById(id);
-const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");   // also safe inside attributes
 // Competition ranking for a list already sorted high to low: ties share a rank (1, 1, 3).
 const ranks = (rows, value) => rows.map((r, i) => { let k = i; while (k > 0 && value(rows[k - 1]) === value(r)) k--; return k + 1; });
+
+// Whole numbers with separators; from 100,000 up, a short form (98.8M, 123K) so the number fits its tile on a phone.
+const big = n => (n >= 1e5 ? new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(n) : n.toLocaleString());
 
 const svg = d => `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 const ICONS = {
@@ -236,7 +239,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const fill = $("progressFill"), label = $("progressLabel");
     const progress = (stage, pct) => { fill.style.width = `${pct}%`; label.textContent = `${stage}... ${pct}%`; };
     const abort = new AbortController();
-    $("cancelBtn").addEventListener("click", () => abort.abort());
+    $("cancelBtn").addEventListener("click", e => {          // the scan stops at the end of the current step, which can take a few seconds on a phone
+      abort.abort(); e.currentTarget.disabled = true; label.textContent = "Cancelling... finishing the current step";
+    });
 
     scanBtn.disabled = true;
     try {
@@ -244,7 +249,13 @@ document.addEventListener("DOMContentLoaded", () => {
       if (sheetMode() === "upload" && sheet) knownGoals = await readKnownGoals(sheet.bytes, sheet.name);
 
       label.textContent = poolPromise ? "Starting..." : "Loading text recognition (first time only)...";
-      const ocr = await getPool();
+      let ocr;
+      try { ocr = await getPool(); }
+      catch (e) {
+        throw new Error(navigator.onLine === false
+          ? "You're offline, and the text recognition files haven't been downloaded to this device yet. Connect once and scan to download them; after that scanning works offline."
+          : "Couldn't load the text recognition files. Check your connection and try again.");
+      }
 
       const data = await processImages(imageFiles, normNames, { detect, ocr, decodeImage, progress, knownGoals, signal: abort.signal });
       renderResults(data, detect, imageFiles.length);
@@ -357,7 +368,7 @@ document.addEventListener("DOMContentLoaded", () => {
       confirmContainer.innerHTML = `<div class="confirm-actions"><button id="saveBtn" class="primary">${ic("save")}Save to spreadsheet</button>
         <button id="editBtn" type="button" class="btn-cancel">${ic("edit")}Edit results</button></div>
         <div class="hint-text">After saving you'll get a downloadable updated file.</div>
-        ${communityEnabled() ? `<label class="check community-opt"><input type="checkbox" id="communityOpt"${getOptIn() ? " checked" : ""}> <span>Add this scan to the community totals <span class="opt">(anonymous: only player names and goal counts are shared)</span></span></label>` : ""}`;
+        ${communityEnabled() ? `<label class="check community-opt"><input type="checkbox" id="communityOpt"${getOptIn() ? " checked" : ""}> <span>Add this scan to the community totals <span class="opt">(only player names and goal counts are sent, never screenshots or opponents)</span></span></label>` : ""}`;
       $("communityOpt")?.addEventListener("change", e => setOptIn(e.target.checked));
       $("saveBtn").addEventListener("click", e => save(e.target, data, excluded, reduced));
       $("editBtn").addEventListener("click", showConfirmStep);
@@ -412,7 +423,7 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       const sheetBytes = sheetMode() === "upload" && sheet ? sheet.bytes : null;
       const known = sheetBytes ? await readKnownGoals(sheetBytes, sheet.name) : [];
-      const { counts, logGoals: toRecord, theirGoals, statRecords, gameRecords, skipped, problem } = buildSave(data, known, excluded, reduced);
+      const { counts, logGoals: toRecord, shareGoals, theirGoals, statRecords, gameRecords, skipped, problem } = buildSave(data, known, excluded, reduced);
       if (problem) throw new Error(problem);
       const out = await updateWorkbook({ sheetBytes, filename: sheet?.name || "", counts, timestamp: data.timestamp,
                                          normalize, logGoals: toRecord, theirGoals, statRecords, gameRecords });
@@ -436,7 +447,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       confirmContainer.innerHTML = `<div class="saved-msg">${msg}</div><p id="communityNote" class="hint-text" hidden></p>${totals}`;
       showAllTimeStats(out.stats, false, out.sheet_totals);   // averages, hat-tricks and clutch from the saved file
-      if (shareToCommunity) addToCommunity(toRecord, gameRecords);
+      if (shareToCommunity) addToCommunity(shareGoals, gameRecords);
       $("openLink").click();                                  // start the download
     } catch (err) {
       showError(err.message || "Failed to save to spreadsheet.");
@@ -466,15 +477,15 @@ document.addEventListener("DOMContentLoaded", () => {
     if (strip) {
       const top = t.scorers.slice(0, 3);
       $("community-top-body").innerHTML = `<div class="cs-figures">
-          <div><strong>${t.goals.toLocaleString()}</strong><span>Total goals</span></div>
-          <div><strong>${t.games.toLocaleString()}</strong><span>Total games</span></div></div>`
+          <div><strong>${big(t.goals)}</strong><span>Total goals</span></div>
+          <div><strong>${big(t.games)}</strong><span>Total games</span></div></div>`
         + (none ? `<p class="cs-empty">${emptyMsg}</p>` : "")
         + (top.length ? `<ol class="cs-top" aria-label="Top scorers">${top.map((r, i) => `<li><span class="rank">${rk[i]}</span><span class="cs-name">${esc(r.name)}</span><b>${Number(r.goals)}</b></li>`).join("")}</ol>` : "");
     }
     const avg = t.games ? (t.goals / t.games).toFixed(2) : "0.00";
     $("community-body").innerHTML = `<div class="community-tiles">
-        <div class="community-tile"><strong>${t.goals.toLocaleString()}</strong><span>Total goals</span></div>
-        <div class="community-tile"><strong>${t.games.toLocaleString()}</strong><span>Games</span></div>
+        <div class="community-tile"><strong>${big(t.goals)}</strong><span>Total goals</span></div>
+        <div class="community-tile"><strong>${big(t.games)}</strong><span>Games</span></div>
         <div class="community-tile"><strong>${avg}</strong><span>Goals per game</span></div></div>`
       + (t.scorers.length ? `<div class="totals-block"><h4 class="totals-title">Top scorers</h4>
           <table class="results-table"><thead><tr><th>Name</th><th>Goals</th></tr></thead><tbody>

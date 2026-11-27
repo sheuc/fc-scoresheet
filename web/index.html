@@ -19,6 +19,9 @@
   <meta name="theme-color" content="#0b1220" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <link rel="preload" href="fonts/inter-latin-500.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/inter-latin-700.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -46,13 +49,20 @@
           <p>Scan match screenshots, count goals, update your spreadsheet.</p>
         </div>
       </div>
+      <div class="header-actions">
+      <button type="button" class="theme-toggle report-top" data-report-open aria-haspopup="dialog" aria-label="Report a bug" title="Report a bug">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2l1.9 1.9M16 2l-1.9 1.9"/><path d="M9 7.1V6a3 3 0 0 1 6 0v1.1"/><path d="M12 20a6 6 0 0 1-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3a6 6 0 0 1-6 6z"/><path d="M12 20v-9M6 13H2M22 13h-4M6.5 18.5L3.5 20.5M17.5 18.5l3 2"/></svg>
+        <span class="label">Report a bug</span>
+      </button>
       <button type="button" id="themeToggle" class="theme-toggle" aria-label="Switch to light mode" title="Toggle dark / light mode">
         <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"></path></svg>
         <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path></svg>
         <span class="label">Dark</span>
       </button>
+      </div>
     </header>
 
+    <main>
     <!-- A short version of the Community panel (filled in once the shared totals have loaded) -->
     <section class="community-strip" id="community-top" aria-label="Community totals" hidden>
       <div class="cs-head"><span class="cs-title">Community</span><a class="cs-more" href="#community-card">See all</a></div>
@@ -100,7 +110,7 @@
       </div>
 
       <label for="names" class="field-label">Enter names to find (comma-separated):</label>
-      <input type="text" id="names" placeholder="e.g., Messi, C. Ronaldo, Bellingham" />
+      <input type="text" id="names" placeholder="e.g., Messi, C. Ronaldo, Bellingham" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off" enterkeyhint="done" />
 
       <label class="switch">
         <input type="checkbox" id="detectNames" />
@@ -203,8 +213,10 @@
       <div id="community-body"></div>
     </section>
 
+    </main>
+
     <footer class="app-footer">
-      <button id="report-open" type="button" class="link-btn" aria-haspopup="dialog"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2l1.9 1.9M16 2l-1.9 1.9"/><path d="M9 7.1V6a3 3 0 0 1 6 0v1.1"/><path d="M12 20a6 6 0 0 1-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3a6 6 0 0 1-6 6z"/><path d="M12 20v-9M6 13H2M22 13h-4M6.5 18.5L3.5 20.5M17.5 18.5l3 2"/></svg>Report a bug</button>
+      <button id="report-open" type="button" class="link-btn" data-report-open aria-haspopup="dialog"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2l1.9 1.9M16 2l-1.9 1.9"/><path d="M9 7.1V6a3 3 0 0 1 6 0v1.1"/><path d="M12 20a6 6 0 0 1-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3a6 6 0 0 1-6 6z"/><path d="M12 20v-9M6 13H2M22 13h-4M6.5 18.5L3.5 20.5M17.5 18.5l3 2"/></svg>Report a bug</button>
     </footer>
 
   </div>
@@ -274,7 +286,7 @@
         <textarea id="report-text" rows="5" maxlength="2000" placeholder="e.g. A goal was read as the wrong player, or a button did nothing."></textarea>
         <label for="report-email" class="field-label">Your email <span class="opt">(optional, only if you want a reply)</span></label>
         <input id="report-email" type="email" autocomplete="email" spellcheck="false" placeholder="you@example.com">
-        <input id="report-website" class="report-trap" type="text" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <div aria-hidden="true" inert><input id="report-website" class="report-trap" type="text" tabindex="-1" autocomplete="off"></div>
         <label class="check"><input type="checkbox" id="report-include" checked> Include details that help me fix it</label>
         <pre id="report-details" class="report-details"></pre>
         <p class="small">Your report goes privately to the developer. It is not posted anywhere public.</p>

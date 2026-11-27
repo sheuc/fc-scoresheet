@@ -258,7 +258,7 @@ export async function processImages(files, normNames, opts) {
       if (a.score_l && a.score_r && a.opp_crop) analyzed.push(a);
       else warnings.push(`${f.name}: doesn't look like a post-match screen; skipped.`);
     } catch (e) {
-      warnings.push(`${f.name}: couldn't be read as an image; skipped.`);
+      warnings.push(e?.code === "TOO_LARGE" ? `${f.name}: too large to be a phone screenshot (over 36 megapixels); skipped.` : `${f.name}: couldn't be read as an image; skipped.`);
     }
     report(`Reading screenshots (${i + 1} of ${total})`, Math.round(35 * (i + 1) / total));
     if (i % 4 === 3) await new Promise(r => setTimeout(r, 0));      // let the page repaint
@@ -321,14 +321,22 @@ export async function processImages(files, normNames, opts) {
   const withStats = analyzed.filter(a => a.stats_crops);
   if (withStats.length) {
     // Match stats are an extra: whatever goes wrong while reading them must never cost the goals.
+    let read;
     try {
-      const read = await readMatchStats(ocr, withStats.map(a => a.stats_crops), f => report("Reading match stats", Math.round(74 + 18 * f)));
-      withStats.forEach((a, i) => { a.stats = read[i]; });
+      read = await readMatchStats(ocr, withStats.map(a => a.stats_crops), f => report("Reading match stats", Math.round(74 + 18 * f)));
     } catch (e) {
       if (e?.name === "AbortError" || signal?.aborted) throw e;
-      warnings.push("The match stats couldn't be read from these screenshots, so none were recorded (the goals were not affected).");
-      withStats.forEach(a => { a.stats = null; });
+      // One odd image (a tiny or blank one) must not cost every other screenshot its stats: read them one at a time.
+      read = []; let failed = 0;
+      for (const a of withStats) {
+        aborted();
+        try { read.push((await readMatchStats(ocr, [a.stats_crops]))[0]); }
+        catch (e2) { if (e2?.name === "AbortError" || signal?.aborted) throw e2; failed++; read.push(null); }
+      }
+      if (failed === withStats.length) warnings.push("The match stats couldn't be read from these screenshots, so none were recorded (the goals were not affected).");
+      else if (failed) warnings.push(`The match stats of ${failed} screenshot(s) couldn't be read, so they weren't recorded (the goals were not affected).`);
     }
+    withStats.forEach((a, i) => { a.stats = read[i]; });
   }
   report("Merging screenshots into games", 92);
 

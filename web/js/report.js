@@ -46,9 +46,9 @@ async function sendReport(key, text, email, withDetails) {
 
 document.addEventListener("DOMContentLoaded", () => {
   const key = (document.querySelector('meta[name="report-key"]')?.content || "").trim();
-  const dialog = $("report-dialog"), open = $("report-open");
+  const dialog = $("report-dialog"), open = $("report-open"), opens = [...document.querySelectorAll("[data-report-open]")];   // the footer link and the button at the top
   if (!dialog || !open) return;
-  if (!key) { open.hidden = true; return; }                       // not set up yet: no link rather than a broken one
+  if (!key) { opens.forEach(b => { b.hidden = true; }); return; }                       // not set up yet: no link rather than a broken one
   const text = $("report-text"), email = $("report-email"), include = $("report-include"), shown = $("report-details");
   const send = $("report-send"), trap = $("report-website"), status = $("report-status"), form = $("report-form"), done = $("report-done");
   let opener = null, busy = false;
@@ -63,7 +63,7 @@ document.addEventListener("DOMContentLoaded", () => {
     dialog.hidden = true; document.body.classList.remove("editing");
     (opener && document.contains(opener) ? opener : open).focus();
   }
-  open.addEventListener("click", show);
+  opens.forEach(b => b.addEventListener("click", show));
   $("report-cancel").addEventListener("click", hide);
   $("report-close").addEventListener("click", hide);
   dialog.addEventListener("click", e => { if (e.target === dialog) hide(); });
