@@ -459,15 +459,16 @@ document.addEventListener("DOMContentLoaded", () => {
     const t = await loadTotals();
     if (!t) return;
     const strip = $("community-top");
-    const empty = !t.games && !t.goals;                       // nothing shared yet: show neither panel rather than zeros
-    card.hidden = empty; if (strip) strip.hidden = empty;
-    if (empty) return;
+    card.hidden = false; if (strip) strip.hidden = false;      // shown even when empty, so people know it exists
+    const none = !t.games && !t.goals && !t.scorers.length;
+    const emptyMsg = "Nothing shared yet. Save a scan with the community box ticked to add the first totals.";
     const rk = ranks(t.scorers, r => Number(r.goals));
     if (strip) {
       const top = t.scorers.slice(0, 3);
       $("community-top-body").innerHTML = `<div class="cs-figures">
           <div><strong>${t.goals.toLocaleString()}</strong><span>Total goals</span></div>
           <div><strong>${t.games.toLocaleString()}</strong><span>Total games</span></div></div>`
+        + (none ? `<p class="cs-empty">${emptyMsg}</p>` : "")
         + (top.length ? `<ol class="cs-top" aria-label="Top scorers">${top.map((r, i) => `<li><span class="rank">${rk[i]}</span><span class="cs-name">${esc(r.name)}</span><b>${Number(r.goals)}</b></li>`).join("")}</ol>` : "");
     }
     const avg = t.games ? (t.goals / t.games).toFixed(2) : "0.00";
@@ -478,7 +479,8 @@ document.addEventListener("DOMContentLoaded", () => {
       + (t.scorers.length ? `<div class="totals-block"><h4 class="totals-title">Top scorers</h4>
           <table class="results-table"><thead><tr><th>Name</th><th>Goals</th></tr></thead><tbody>
           ${t.scorers.map((r, i) => `<tr><td><span class="rank">${rk[i]}</span>${esc(r.name)}</td><td data-label="${r.goals === 1 ? "goal" : "goals"}">${Number(r.goals)}</td></tr>`).join("")}
-          </tbody></table></div>` : "");
+          </tbody></table></div>` : "")
+      + (none ? `<p class="sub">${emptyMsg}</p>` : "");
   }
   refreshCommunity();
 

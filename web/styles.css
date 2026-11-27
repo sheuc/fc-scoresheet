@@ -847,6 +847,7 @@ body.editing { overflow: hidden; }
 .community-strip[hidden] { display: none; }
 .cs-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
 .cs-title { font-size: 12px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
+.cs-empty { margin: 0; font-size: 13px; color: var(--muted); }
 .cs-more { font-size: 13px; color: var(--accent-text); text-decoration: none; }
 .cs-more:hover { text-decoration: underline; }
 .cs-body { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 28px; }
