@@ -839,3 +839,23 @@ body.editing { overflow: hidden; }
 .community-tile strong { font-size: 24px; font-variant-numeric: tabular-nums; color: var(--accent-text); }
 .community-tile span { font-size: 12px; color: var(--muted); }
 #community-card[hidden] { display: none; }
+
+/* ---- rank numbers in the top-scorer tables, and the short Community strip at the top ---- */
+.rank { display: inline-block; min-width: 1.6em; margin-right: 6px; color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 700; }
+.results-table tbody tr:first-child .rank { color: var(--accent-text); }
+.community-strip { margin: 0 0 16px; padding: 14px 18px; border-radius: 16px; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow); }
+.community-strip[hidden] { display: none; }
+.cs-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
+.cs-title { font-size: 12px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
+.cs-more { font-size: 13px; color: var(--accent-text); text-decoration: none; }
+.cs-more:hover { text-decoration: underline; }
+.cs-body { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 28px; }
+.cs-figures { display: flex; gap: 24px; }
+.cs-figures div { display: grid; }
+.cs-figures strong { font-size: 24px; line-height: 1.1; font-variant-numeric: tabular-nums; color: var(--accent-text); }
+.cs-figures span { font-size: 12px; color: var(--muted); }
+.cs-top { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 20px; }
+.cs-top li { display: flex; align-items: baseline; gap: 4px; font-size: 14px; }
+.cs-top .rank { min-width: 0; margin-right: 2px; }
+.cs-top b { margin-left: 4px; font-variant-numeric: tabular-nums; color: var(--accent-text); }
+@media (max-width: 520px) { .cs-top { flex-direction: column; } }

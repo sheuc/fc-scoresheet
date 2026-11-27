@@ -13,6 +13,8 @@ import { buildContribution, communityEnabled, contribute, getOptIn, loadTotals, 
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+// Competition ranking for a list already sorted high to low: ties share a rank (1, 1, 3).
+const ranks = (rows, value) => rows.map((r, i) => { let k = i; while (k > 0 && value(rows[k - 1]) === value(r)) k--; return k + 1; });
 
 const svg = d => `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 const ICONS = {
@@ -429,7 +431,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (out.sheet_totals.length) {
         totals = `<div class="totals-block"><h4 class="totals-title">Spreadsheet top scorers</h4>
           <table class="results-table"><thead><tr><th>Name</th><th>Total</th></tr></thead><tbody>
-          ${out.sheet_totals.map(r => `<tr><td>${esc(capitalizeName(r.name))}</td><td data-label="${r.total === 1 ? "goal" : "goals"}">${r.total}</td></tr>`).join("")}
+          ${(rk => out.sheet_totals.map((r, i) => `<tr><td><span class="rank">${rk[i]}</span>${esc(capitalizeName(r.name))}</td><td data-label="${r.total === 1 ? "goal" : "goals"}">${r.total}</td></tr>`).join(""))(ranks(out.sheet_totals, r => r.total))}
           </tbody></table></div>`;
       }
       confirmContainer.innerHTML = `<div class="saved-msg">${msg}</div><p id="communityNote" class="hint-text" hidden></p>${totals}`;
@@ -456,7 +458,18 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!card || !communityEnabled()) return;
     const t = await loadTotals();
     if (!t) return;
-    card.hidden = false;
+    const strip = $("community-top");
+    const empty = !t.games && !t.goals;                       // nothing shared yet: show neither panel rather than zeros
+    card.hidden = empty; if (strip) strip.hidden = empty;
+    if (empty) return;
+    const rk = ranks(t.scorers, r => Number(r.goals));
+    if (strip) {
+      const top = t.scorers.slice(0, 3);
+      $("community-top-body").innerHTML = `<div class="cs-figures">
+          <div><strong>${t.goals.toLocaleString()}</strong><span>Total goals</span></div>
+          <div><strong>${t.games.toLocaleString()}</strong><span>Total games</span></div></div>`
+        + (top.length ? `<ol class="cs-top" aria-label="Top scorers">${top.map((r, i) => `<li><span class="rank">${rk[i]}</span><span class="cs-name">${esc(r.name)}</span><b>${Number(r.goals)}</b></li>`).join("")}</ol>` : "");
+    }
     const avg = t.games ? (t.goals / t.games).toFixed(2) : "0.00";
     $("community-body").innerHTML = `<div class="community-tiles">
         <div class="community-tile"><strong>${t.goals.toLocaleString()}</strong><span>Total goals</span></div>
@@ -464,7 +477,7 @@ document.addEventListener("DOMContentLoaded", () => {
         <div class="community-tile"><strong>${avg}</strong><span>Goals per game</span></div></div>`
       + (t.scorers.length ? `<div class="totals-block"><h4 class="totals-title">Top scorers</h4>
           <table class="results-table"><thead><tr><th>Name</th><th>Goals</th></tr></thead><tbody>
-          ${t.scorers.map(r => `<tr><td>${esc(r.name)}</td><td data-label="${r.goals === 1 ? "goal" : "goals"}">${Number(r.goals)}</td></tr>`).join("")}
+          ${t.scorers.map((r, i) => `<tr><td><span class="rank">${rk[i]}</span>${esc(r.name)}</td><td data-label="${r.goals === 1 ? "goal" : "goals"}">${Number(r.goals)}</td></tr>`).join("")}
           </tbody></table></div>` : "");
   }
   refreshCommunity();

@@ -18,7 +18,12 @@ export function startServer(port = 8080) {
       if (!file.startsWith(root + sep) || /[\/](node_modules|tests|scripts)[\/]/.test(file)) { res.writeHead(403).end("forbidden"); return; }
       if (!(await stat(file)).isFile()) throw new Error("not a file");
       res.writeHead(200, { "content-type": TYPES[extname(file)] || "application/octet-stream", "cache-control": "no-cache" });
-      res.end(await readFile(file));
+      let body = await readFile(file);
+      // Running locally must never talk to the live services (bug-report form, community totals): blank their keys
+      // in the page unless explicitly asked to use them (ALLOW_LIVE_SERVICES=1).
+      if (extname(file) === ".html" && !process.env.ALLOW_LIVE_SERVICES)
+        body = body.toString("utf8").replace(/(<meta name="(?:report-key|community-url)" content=")[^"]*"/g, '$1"');
+      res.end(body);
     } catch { res.writeHead(404).end("not found"); }
   });
   return new Promise(resolve => server.listen(port, process.env.HOST || "127.0.0.1", () => resolve(server)));
