@@ -8,6 +8,7 @@ import { initShareCard } from "./sharecard-ui.js";
 import { buildSave } from "./save.js";
 import { computeScanStats } from "./stats.js";
 import { capitalizeName, normalize } from "./text.js";
+import { buildContribution, communityEnabled, contribute, getOptIn, loadTotals, setOptIn } from "./community.js";
 
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const $ = id => document.getElementById(id);
@@ -353,7 +354,9 @@ document.addEventListener("DOMContentLoaded", () => {
       showScanStats(data, excluded, reduced);
       confirmContainer.innerHTML = `<div class="confirm-actions"><button id="saveBtn" class="primary">${ic("save")}Save to spreadsheet</button>
         <button id="editBtn" type="button" class="btn-cancel">${ic("edit")}Edit results</button></div>
-        <div class="hint-text">After saving you'll get a downloadable updated file.</div>`;
+        <div class="hint-text">After saving you'll get a downloadable updated file.</div>
+        ${communityEnabled() ? `<label class="check community-opt"><input type="checkbox" id="communityOpt"${getOptIn() ? " checked" : ""}> <span>Add this scan to the community totals <span class="opt">(anonymous: only player names and goal counts are shared)</span></span></label>` : ""}`;
+      $("communityOpt")?.addEventListener("change", e => setOptIn(e.target.checked));
       $("saveBtn").addEventListener("click", e => save(e.target, data, excluded, reduced));
       $("editBtn").addEventListener("click", showConfirmStep);
       previewAllTime(data, excluded, reduced);
@@ -401,6 +404,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // ---- save: record the goals in the user's spreadsheet and hand back the updated file ----
   async function save(button, data, excluded, reduced) {
     clearError();
+    const shareToCommunity = !!$("communityOpt")?.checked;     // read before the step's HTML is replaced
     button.disabled = true;
     previewToken++;                                           // a preview still being built must not overwrite the saved result
     try {
@@ -428,14 +432,42 @@ document.addEventListener("DOMContentLoaded", () => {
           ${out.sheet_totals.map(r => `<tr><td>${esc(capitalizeName(r.name))}</td><td data-label="${r.total === 1 ? "goal" : "goals"}">${r.total}</td></tr>`).join("")}
           </tbody></table></div>`;
       }
-      confirmContainer.innerHTML = `<div class="saved-msg">${msg}</div>${totals}`;
+      confirmContainer.innerHTML = `<div class="saved-msg">${msg}</div><p id="communityNote" class="hint-text" hidden></p>${totals}`;
       showAllTimeStats(out.stats, false, out.sheet_totals);   // averages, hat-tricks and clutch from the saved file
+      if (shareToCommunity) addToCommunity(toRecord, gameRecords);
       $("openLink").click();                                  // start the download
     } catch (err) {
       showError(err.message || "Failed to save to spreadsheet.");
       button.disabled = false;
     }
   }
+
+  // ---- community totals: opt-in, never blocks or fails a save ----
+  async function addToCommunity(logGoals, gameRecords) {
+    const note = $("communityNote");
+    const c = buildContribution(logGoals, gameRecords);
+    if (!c) { if (note) { note.hidden = false; note.textContent = "Nothing new to add to the community totals."; } return; }
+    const ok = await contribute(c);
+    if (note) { note.hidden = false; note.textContent = ok ? "Added to the community totals. Thank you!" : "Couldn't add this scan to the community totals right now."; }
+    if (ok) refreshCommunity();
+  }
+  async function refreshCommunity() {
+    const card = $("community-card");
+    if (!card || !communityEnabled()) return;
+    const t = await loadTotals();
+    if (!t) return;
+    card.hidden = false;
+    const avg = t.games ? (t.goals / t.games).toFixed(2) : "0.00";
+    $("community-body").innerHTML = `<div class="community-tiles">
+        <div class="community-tile"><strong>${t.goals.toLocaleString()}</strong><span>Total goals</span></div>
+        <div class="community-tile"><strong>${t.games.toLocaleString()}</strong><span>Games</span></div>
+        <div class="community-tile"><strong>${avg}</strong><span>Goals per game</span></div></div>`
+      + (t.scorers.length ? `<div class="totals-block"><h4 class="totals-title">Top scorers</h4>
+          <table class="results-table"><thead><tr><th>Name</th><th>Goals</th></tr></thead><tbody>
+          ${t.scorers.map(r => `<tr><td>${esc(r.name)}</td><td data-label="${r.goals === 1 ? "goal" : "goals"}">${Number(r.goals)}</td></tr>`).join("")}
+          </tbody></table></div>` : "");
+  }
+  refreshCommunity();
 
   // ---- offline support ----
   if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {

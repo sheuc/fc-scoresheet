@@ -29,7 +29,9 @@ You also get:
 
 ## Privacy
 
-There is no server and no account. The OCR engine runs in your browser, your images are never uploaded, and your spreadsheet stays on your device. Share-card choices are remembered in your browser only. After the first visit the app also works offline.
+There is no server and no account. The OCR engine runs in your browser, your images are never uploaded, and your spreadsheet stays on your device. Share-card choices are remembered in your browser only.
+
+**Community totals (optional).** When you save a scan you can add it to shared community totals: total goals, games and top scorers across everyone who opted in. This is on by default and you can untick it for any scan. Only player names and goal counts are sent. Never your screenshots, opponent names, scores or spreadsheet. After the first visit the app also works offline.
 
 ## Run it locally
 
