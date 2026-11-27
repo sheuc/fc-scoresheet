@@ -65,5 +65,6 @@ Your spreadsheet keeps a visible **Stats** sheet and a few hidden helper sheets.
 
 ## Known limits
 
-- Tuned on screenshots from one phone. Other phones, aspect ratios and languages are only simulated so far, so expect the odd misread: that is what the Confirm step is for.
+- **English only.** The app reads screenshots of the game set to English. Other game languages are not supported.
+- Tuned on screenshots from one phone. Other phones and screen shapes have only been simulated so far, so expect the odd misread: that is what the Confirm step is for.
 - The share sheet needs https on a phone (it works on the deployed site, not on a plain-http local address).
