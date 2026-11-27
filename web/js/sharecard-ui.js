@@ -198,27 +198,30 @@ export function initShareCard() {
   });
 
   // ---- download / share / copy
+  const touch = !!(window.matchMedia && (matchMedia("(pointer: coarse)").matches || matchMedia("(hover: none)").matches));
+  const saveWord = touch ? "Save to device" : "Download";
+  if (touch) { const b = $("card-download"); if (b.lastChild && b.lastChild.nodeType === 3) b.lastChild.textContent = " Save to device"; }
   $("card-download").addEventListener("click", () => {
     if (!state.blob) return;
     const url = URL.createObjectURL(state.blob), a = document.createElement("a");
     a.href = url; a.download = state.fileName; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
-    note.textContent = "Saved to your downloads.";
+    note.textContent = touch ? "Saved to your device." : "Saved to your downloads.";
   });
   const fileOf = () => new File([state.blob], state.fileName, { type: "image/png" });
   const canShare = () => typeof navigator.canShare === "function" && typeof navigator.share === "function" && state.blob && navigator.canShare({ files: [fileOf()] });
   $("card-share").hidden = !(typeof navigator.share === "function" && typeof navigator.canShare === "function" && typeof File === "function");
   $("card-share").addEventListener("click", async () => {
     if (!state.blob) return;
-    if (!canShare()) { note.textContent = "Sharing isn't available here. Use Download instead."; return; }
+    if (!canShare()) { note.textContent = `Sharing isn't available here. Use ${saveWord} instead.`; return; }
     try { await navigator.share({ files: [fileOf()], title: canvas.dataset.title }); }
-    catch (e) { if (e?.name !== "AbortError") note.textContent = "Couldn't open the share sheet. Use Download instead."; }
+    catch (e) { if (e?.name !== "AbortError") note.textContent = `Couldn't open the share sheet. Use ${saveWord} instead.`; }
   });
   $("card-copy").hidden = !(navigator.clipboard && typeof navigator.clipboard.write === "function" && typeof ClipboardItem === "function");
   $("card-copy").addEventListener("click", async () => {
     if (!state.blob) return;
     try { await navigator.clipboard.write([new ClipboardItem({ "image/png": state.blob })]); note.textContent = "Image copied: paste it into a chat or post."; }
-    catch { note.textContent = "Couldn't copy the image here. Use Download instead."; }
+    catch { note.textContent = `Couldn't copy the image here. Use ${saveWord} instead.`; }
   });
 
   // a scan that has just been confirmed is the card's data (even if a spreadsheet was loaded first); the spreadsheet is a choice in Data

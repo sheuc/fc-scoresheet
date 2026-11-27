@@ -5,6 +5,9 @@ const SENT_KEY = "fcstat.community.sent.v1";     // goals/games this browser has
 const OPT_KEY = "fcstat.community.optin";
 const MAX_REMEMBERED = 5000;
 
+// Opening the site with ?resetcommunity forgets which goals this browser has already added (handy after clearing the shared sheet).
+try { if (new URLSearchParams(location.search).has("resetcommunity")) localStorage.removeItem(SENT_KEY); } catch { /* fine */ }
+
 const url = () => (document.querySelector('meta[name="community-url"]')?.content || "").trim();
 export const communityEnabled = () => !!url();
 
