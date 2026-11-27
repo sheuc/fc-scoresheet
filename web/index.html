@@ -12,6 +12,8 @@
       document.documentElement.setAttribute("data-theme", t);
     })();
   </script>
+  <!-- Web3Forms access key for the "Report a bug" form (get one free at web3forms.com). Empty = the link is hidden. -->
+  <meta name="report-key" content="" />
   <meta name="theme-color" content="#0b1220" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icon.svg" type="image/svg+xml" />
@@ -247,14 +249,24 @@
   <div id="report-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="report-title" hidden>
     <div class="modal-card">
       <h2 id="report-title">Report a bug</h2>
-      <label for="report-text" class="field-label">What went wrong?</label>
-      <textarea id="report-text" rows="5" maxlength="2000" placeholder="e.g. A goal was read as the wrong player, or a button did nothing."></textarea>
-      <label class="check"><input type="checkbox" id="report-include" checked> Include details that help me fix it</label>
-      <pre id="report-details" class="report-details"></pre>
-      <p class="small">This opens a ready-to-send report on GitHub, where you can read it and submit it. It is public, so please leave out personal info. You can drag a screenshot into the report there.</p>
-      <div class="modal-actions">
-        <button id="report-cancel" type="button" class="btn-cancel">Cancel</button>
-        <button id="report-send" type="button" class="primary" disabled>Continue to GitHub</button>
+      <div id="report-form">
+        <label for="report-text" class="field-label">What went wrong?</label>
+        <textarea id="report-text" rows="5" maxlength="2000" placeholder="e.g. A goal was read as the wrong player, or a button did nothing."></textarea>
+        <label for="report-email" class="field-label">Your email <span class="opt">(optional, only if you want a reply)</span></label>
+        <input id="report-email" type="email" autocomplete="email" spellcheck="false" placeholder="you@example.com">
+        <input id="report-website" class="report-trap" type="text" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <label class="check"><input type="checkbox" id="report-include" checked> Include details that help me fix it</label>
+        <pre id="report-details" class="report-details"></pre>
+        <p class="small">Your report goes privately to the developer. It is not posted anywhere public.</p>
+        <p id="report-status" class="report-status" role="alert"></p>
+        <div class="modal-actions">
+          <button id="report-cancel" type="button" class="btn-cancel">Cancel</button>
+          <button id="report-send" type="button" class="primary" disabled>Send report</button>
+        </div>
+      </div>
+      <div id="report-done" hidden>
+        <p class="report-thanks">Thanks, your report was sent.</p>
+        <div class="modal-actions"><button id="report-close" type="button" class="primary">Close</button></div>
       </div>
     </div>
   </div>
