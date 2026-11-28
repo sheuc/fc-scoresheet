@@ -36,6 +36,7 @@
   --sheet: #6aa6ff;             /* the all-time (spreadsheet) stats panel; the scan panel uses --accent */
   --sheet-soft: rgba(106, 166, 255, 0.09);
   --sheet-text: #8dbbff;
+  --gold: #ffc933; --silver: #c3ccd9; --bronze: #e0955a;      /* top-scorer medals: 1st, 2nd, 3rd (ties share) */
 }
 
 :root[data-theme="light"] {
@@ -70,6 +71,7 @@
   --sheet: #2f6fd6;
   --sheet-soft: rgba(47, 111, 214, 0.07);
   --sheet-text: #1f56b0;
+  --gold: #b07f00; --silver: #6b7a90; --bronze: #a2602a;
 }
 
 /* The page's own typeface (the share card uses the same files). Weights 400 and 600 fall back to 500 and 700. */
@@ -539,7 +541,6 @@ button.primary:disabled { box-shadow: none; }
 @media (hover: hover) { .files-toggle:hover { text-decoration-thickness: 2px; filter: brightness(1.15); } }
 .files-short[hidden], .files-full[hidden] { display: none; }
 /* top scorer highlight */
-.results-table tbody tr:first-child td:first-child { box-shadow: 3px 0 0 var(--accent) inset; padding-left: 16px; }
 .results-table td.empty-cell { padding: 18px 14px; text-align: center !important; font-family: inherit; font-size: 14px; font-weight: 400; color: var(--muted); width: auto; white-space: normal; }
 .results-table tr.is-removed td:not(:last-child) { opacity: 0.4; text-decoration: line-through; }
 
@@ -606,7 +607,6 @@ button.primary:disabled { box-shadow: none; }
   .sheet-options { grid-template-columns: 1fr; }
   .results-table th, .results-table td { padding: 9px 7px; }
   .results-table th:first-child, .results-table td:first-child { padding-left: 10px; }
-  .results-table tbody tr:first-child td:first-child { padding-left: 12px; }
   .results-table td:nth-child(2) { font-size: 20px; }
   .results-table td:nth-child(3) { min-width: 88px; font-size: 11.5px; word-break: normal; overflow-wrap: normal; }
   .results-table td:nth-child(4) { padding-right: 8px; }
@@ -656,8 +656,6 @@ button.primary:disabled { box-shadow: none; }
   .results-table td:nth-child(3) { grid-area: files; min-width: 0; font-size: 12px; overflow-wrap: anywhere; }
   .results-table td[data-label]:nth-child(3)::before { content: attr(data-label) ": "; font-weight: 700; }
   .results-table td:nth-child(4) { grid-area: action; padding: 0; }
-  .results-table tbody tr:first-child { box-shadow: 3px 0 0 var(--accent) inset; }
-  .results-table tbody tr:first-child td:first-child { box-shadow: none; padding-left: 0; }
   .results-table td.empty-cell { grid-column: 1 / -1; }
   /* scan results: name + trash on the first line, the goal stepper under it, then files */
   #results .results-table tbody tr {
@@ -847,7 +845,6 @@ body.editing { overflow: hidden; }
 
 /* ---- rank numbers in the top-scorer tables, and the short Community strip at the top ---- */
 .rank { display: inline-block; min-width: 1.6em; margin-right: 6px; color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 700; }
-.results-table tbody tr:first-child .rank { color: var(--accent-text); }
 .community-strip { margin: 0 0 16px; padding: 14px 18px; border-radius: 16px; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow); }
 .community-strip[hidden] { display: none; }
 .cs-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
@@ -960,4 +957,17 @@ body.editing { overflow: hidden; }
   .brand-mark { width: 34px; height: 34px; }
   .brand h1 { font-size: 20px; }
   .header-actions { gap: 6px; }
+}
+
+/* ---- gold, silver and bronze for the top three of every top-scorer list (tied players share a medal) ---- */
+[data-medal="1"] { --medal: var(--gold); }
+[data-medal="2"] { --medal: var(--silver); }
+[data-medal="3"] { --medal: var(--bronze); }
+.results-table tbody tr[data-medal] td:first-child { box-shadow: 3px 0 0 var(--medal) inset; padding-left: 16px; }
+.results-table tbody tr[data-medal] .rank, .cs-top li[data-medal] .rank { color: var(--medal); }
+.cs-top li[data-medal] .rank { text-shadow: 0 0 0.5px var(--medal); }
+@media (max-width: 640px) { .results-table tbody tr[data-medal] td:first-child { padding-left: 12px; } }
+@media (max-width: 520px) {
+  .results-table tbody tr[data-medal] { box-shadow: 3px 0 0 var(--medal) inset; }
+  .results-table tbody tr[data-medal] td:first-child { box-shadow: none; padding-left: 0; }
 }

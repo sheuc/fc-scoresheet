@@ -6,7 +6,7 @@
 //   decodeImage(file) -> {data: RGBA, width, height}
 //   ocr: pool from createOcrPool()
 import { digitsFrom } from "./ocr.js";
-import { analyzeImage, minuteGlyphs, PREP_BY_VERSION, REFERENCE_ASPECT } from "./vision.js";
+import { analyzeImage, minuteGlyphs, PREP_BY_VERSION, MIN_LAYOUT_EVIDENCE, REFERENCE_ASPECT } from "./vision.js";
 import { cleanWord, fuzzyMatch, normalize, partialRatio, ratio } from "./text.js";
 import { findKnown, oppKey } from "./goal-log.js";
 import { readMatchStats } from "./statsread.js";
@@ -255,7 +255,9 @@ export async function processImages(files, normNames, opts) {
     const f = files[i];
     try {
       const a = analyzeImage(f.name, await decodeImage(f));
-      if (a.score_l && a.score_r && a.opp_crop) analyzed.push(a);
+      if (a.evidence != null && a.evidence < MIN_LAYOUT_EVIDENCE) {
+        warnings.push(`${f.name}: doesn't look like an FC Mobile match screen (or something, such as a notification, covers the top of it); skipped.`);
+      } else if (a.score_l && a.score_r && a.opp_crop) analyzed.push(a);
       else warnings.push(`${f.name}: doesn't look like a post-match screen; skipped.`);
     } catch (e) {
       warnings.push(e?.code === "TOO_LARGE" ? `${f.name}: too large to be a phone screenshot (over 36 megapixels); skipped.` : `${f.name}: couldn't be read as an image; skipped.`);

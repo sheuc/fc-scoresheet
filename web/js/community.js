@@ -50,11 +50,46 @@ export function buildContribution(logGoals, gameRecords) {
   };
 }
 
+// A submission's id comes from WHAT it contains (plus a random value kept per browser), not from chance. The shared script
+// ignores an id it has already seen, so the same goals sent again (a reply that got lost, storage that was cleared or blocked,
+// two tabs, ?resetcommunity) are counted once. The per-browser value keeps two different people who happen to have
+// identical goals from being mistaken for each other. Without storage it lives for the page's lifetime.
+const SALT_KEY = "fcstat.community.salt.v1";
+let memSalt = null;
+const newRandom = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}`);
+function browserSalt() {
+  try {
+    let s = localStorage.getItem(SALT_KEY);
+    if (!s || s.length < 8) { s = newRandom(); localStorage.setItem(SALT_KEY, s); }
+    return s;
+  } catch { return (memSalt ||= newRandom()); }
+}
+function fallbackHash(text) {                           // cyrb53, twice with different seeds: only used where crypto.subtle is missing
+  const one = seed => {
+    let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
+    for (let i = 0; i < text.length; i++) { const ch = text.charCodeAt(i); h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677); }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16).padStart(14, "0");
+  };
+  return one(1) + one(2);
+}
+export async function submissionId(keys) {
+  const text = `${browserSalt()}\n${[...(keys || [])].sort().join("\n")}`;
+  try {
+    if (globalThis.crypto?.subtle) {
+      const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+      return [...new Uint8Array(d)].map(b => b.toString(16).padStart(2, "0")).join("").slice(0, 48);
+    }
+  } catch { /* fall through */ }
+  return fallbackHash(text);
+}
+
 // Sends one contribution. Never throws; resolves true when it was handed to the service.
 export async function contribute(c) {
   if (!communityEnabled() || !c) return false;
-  const id = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`);
   try {
+    const id = await submissionId(c.keys);
     // text/plain keeps this a "simple" request (no CORS preflight), which Apps Script web apps need
     const res = await fetch(url(), { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({ id, games: c.games, scorers: c.scorers }) });

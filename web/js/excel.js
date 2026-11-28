@@ -19,6 +19,12 @@ const STATS_HEADER = ["Saved", "Opponent", "Score", "Shots", "On target", "Posse
 const MAX_NAMES = 1000;                       // how many player names an uploaded sheet can fill in
 export const MAX_SHEET_BYTES = 5 * 1024 * 1024;   // a results spreadsheet is tiny; refuse anything big
 const BAD_SHEET = "Couldn't read that spreadsheet. Please upload an .xlsx or .csv file.";
+// A tracker is a few hundred rows by a few dozen columns. These limits keep a hostile or accidental file (a stray cell at
+// the far corner of the grid, a 200,000-row export, a zip that inflates to gigabytes) from freezing or crashing the tab.
+export const MAX_ROWS = 20000, MAX_COLS = 600, MAX_INFLATED_BYTES = 100 * 1024 * 1024, MAX_NAME_LEN = 60;
+const TOO_BIG = `That spreadsheet is bigger than this tool reads (more than ${MAX_ROWS.toLocaleString("en")} rows or ${MAX_COLS} columns of data). Remove the extra rows or columns, or start a new spreadsheet.`;
+const TOO_INFLATED = "That file expands to far more data than a results spreadsheet holds, so it was not opened.";
+const limitError = msg => Object.assign(new Error(msg), { keep: true });          // shown as is instead of the generic "couldn't read"
 
 const XL = () => {
   if (!globalThis.ExcelJS) throw new Error("ExcelJS is not loaded");
@@ -70,7 +76,7 @@ function detectDelimiter(text) {
 }
 
 /** Minimal RFC-4180 CSV parser (quotes, escaped quotes, CRLF, BOM). */
-export function parseCsv(text, delim = detectDelimiter(text)) {
+export function parseCsv(text, delim = detectDelimiter(text), maxRows = Infinity) {
   const rows = [];
   let row = [], field = "", quoted = false;
   text = text.replace(/^﻿/, "");
@@ -84,6 +90,7 @@ export function parseCsv(text, delim = detectDelimiter(text)) {
     else if (c === "\n" || c === "\r") {
       if (c === "\r" && text[i + 1] === "\n") i++;
       row.push(field); field = ""; rows.push(row); row = [];
+      if (rows.length > maxRows) throw limitError(TOO_BIG);
     } else field += c;
   }
   if (field !== "" || row.length) { row.push(field); rows.push(row); }
@@ -92,30 +99,71 @@ export function parseCsv(text, delim = detectDelimiter(text)) {
 
 const toBytes = data => (data instanceof Uint8Array ? data : new Uint8Array(data));
 
+/** What a zip says its files add up to when unpacked (read from its directory, nothing is unpacked). 0 if it isn't a zip. */
+export function zipInflatedSize(b) {
+  if (b.length < 22) return 0;
+  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  if (dv.getUint32(0, true) !== 0x04034b50) return 0;                       // not a zip: the loader will say so
+  let e = b.length - 22; const stop = Math.max(0, e - 65535);
+  while (e >= stop && dv.getUint32(e, true) !== 0x06054b50) e--;
+  if (e < stop) return Infinity;
+  const count = dv.getUint16(e + 10, true); let p = dv.getUint32(e + 16, true), total = 0;
+  if (count === 0xffff) return Infinity;                                    // zip64: far beyond a results spreadsheet
+  for (let i = 0; i < count; i++) {
+    if (p + 46 > b.length || dv.getUint32(p, true) !== 0x02014b50) return Infinity;
+    const size = dv.getUint32(p + 24, true);
+    if (size === 0xffffffff) return Infinity;
+    total += size; p += 46 + dv.getUint16(p + 28, true) + dv.getUint16(p + 30, true) + dv.getUint16(p + 32, true);
+  }
+  return total;
+}
+
+/** How far a sheet's DATA reaches: the last row / column that holds a value. Only cells that exist are visited, so one cell at
+ *  XFD1048576 or a thousand empty formatted rows cost nothing (ws.rowCount / ws.columnCount would count them all). */
+export function extent(ws) {
+  let rows = 0, cols = 0;
+  ws.eachRow({ includeEmpty: false }, (row, n) => {
+    row.eachCell({ includeEmpty: false }, (cell, c) => {
+      const v = cell.value; if (v == null || v === "") return;
+      if (n > rows) rows = n; if (c > cols) cols = c;
+    });
+  });
+  return { rows, cols };
+}
+
 /** Open an uploaded .xlsx/.csv (bytes) as a workbook. Throws Error(BAD_SHEET) if unreadable. */
 export async function loadWorkbook(data, filename = "") {
   const bytes = toBytes(data);
   if (bytes.length > MAX_SHEET_BYTES) throw new Error("That spreadsheet is too large (limit 5 MB).");
+  const csv = String(filename).toLowerCase().endsWith(".csv");
+  if (!csv && zipInflatedSize(bytes) > MAX_INFLATED_BYTES) throw limitError(TOO_INFLATED);
+  let wb;
   try {
-    const wb = new (XL().Workbook)();
-    if (String(filename).toLowerCase().endsWith(".csv")) {
+    wb = new (XL().Workbook)();
+    if (csv) {
       const ws = wb.addWorksheet("Sheet1");
-      for (const row of parseCsv(new TextDecoder("utf-8").decode(bytes))) ws.addRow(row);
+      const rows = parseCsv(new TextDecoder("utf-8").decode(bytes), undefined, MAX_ROWS);
+      for (const row of rows) { if (row.length > MAX_COLS) throw limitError(TOO_BIG); ws.addRow(row); }
     } else {
       await wb.xlsx.load(bytes);
     }
-    return wb;
-  } catch {
-    throw new Error(BAD_SHEET);
+  } catch (e) {
+    throw e && e.keep ? e : new Error(BAD_SHEET);
   }
+  for (const ws of wb.worksheets) {                                         // the helper sheets are only ever read row by row
+    if (HELPER_SHEETS.has(ws.name)) continue;
+    const { rows, cols } = extent(ws);
+    if (rows > MAX_ROWS || cols > MAX_COLS) throw limitError(TOO_BIG);
+  }
+  return wb;
 }
 
 function sheetRows(ws, limit) {
-  const rows = [];
-  const last = Math.min(ws.rowCount, limit);
+  const rows = [], ext = extent(ws);
+  const last = Math.min(ext.rows, limit), width = Math.min(ext.cols, 60);       // names sit in the first columns
   for (let r = 1; r <= last; r++) {
     const row = [];
-    for (let c = 1; c <= ws.columnCount; c++) row.push(str(ws.getRow(r).getCell(c).value));
+    for (let c = 1; c <= width; c++) row.push(str(ws.getRow(r).getCell(c).value));
     rows.push(row);
   }
   return rows;
@@ -136,7 +184,7 @@ export async function readNamesFromSheet(data, filename) {
   const ws = wb.worksheets.find(w => plainSheet(w) && w.state === "visible") || wb.worksheets.find(plainSheet) || wb.worksheets[0];   // the sheet a save would update
   const rows = ws ? sheetRows(ws, MAX_NAMES + 1) : [];
   if (!rows.length) throw new Error("File is empty");
-  return { names: namesFromRows(rows).slice(0, MAX_NAMES), orig_name: filename, is_csv: isCsv };
+  return { names: namesFromRows(rows).slice(0, MAX_NAMES).map(n => n.slice(0, MAX_NAME_LEN)), orig_name: filename, is_csv: isCsv };
 }
 
 /** Goals already recorded in the workbook's hidden log (as comparable dicts). */
@@ -219,12 +267,13 @@ const colLetter = n => { let s = ""; for (; n > 0; n = Math.floor((n - 1) / 26))
  *  the Total formulas and styling. Returns the sheet totals. */
 function applyCounts(ws, counts, timestamp, normalize) {
   const tsHeader = timestamp.replace(/ /g, "\n");
-  let maxCol = Math.max(ws.columnCount, 2);
+  const ext = extent(ws);
+  let maxCol = Math.max(ext.cols, 2);
   const header = Array.from({ length: maxCol }, (_, i) => str(ws.getCell(1, i + 1).value));
   let tsCol = header.indexOf(tsHeader) + 1;
   if (!tsCol) { tsCol = maxCol + 1; ws.getCell(1, tsCol).value = tsHeader; maxCol = tsCol; }
 
-  let lastRow = Math.max(ws.rowCount, 1);
+  let lastRow = Math.max(ext.rows, 1);
   const rowOf = new Map();
   for (let r = 2; r <= lastRow; r++) rowOf.set(normalize(str(ws.getCell(r, 1).value)), r);
   for (const name of Object.keys(counts)) {
@@ -264,7 +313,7 @@ function applyCounts(ws, counts, timestamp, normalize) {
     ws.getCell(r, 2).value = maxCol >= 3
       ? { formula: `SUM(C${r}:${colLetter(maxCol)}${r})`, result: total } : 0;
     const shown = Math.abs(total - Math.round(total)) < 1e-9 ? Math.round(total) : Math.round(total * 100) / 100;
-    totals.push({ name: str(ws.getCell(r, 1).value), total: shown });
+    totals.push({ name: str(ws.getCell(r, 1).value).slice(0, MAX_NAME_LEN), total: shown });
   }
 
   for (let c = 1; c <= maxCol; c++) {
@@ -281,9 +330,9 @@ function applyCounts(ws, counts, timestamp, normalize) {
 /** Current per-player totals of a tracker sheet, without changing it. */
 function sheetTotals(ws) {
   const totals = [];
-  const maxCol = Math.max(ws.columnCount, 2), last = Math.max(ws.rowCount, 1);
+  const ext = extent(ws), maxCol = Math.max(ext.cols, 2), last = Math.max(ext.rows, 1);
   for (let r = 2; r <= last; r++) {
-    const name = str(ws.getCell(r, 1).value);
+    const name = str(ws.getCell(r, 1).value).slice(0, MAX_NAME_LEN);
     if (!name) continue;
     let total = 0;
     for (let c = 3; c <= maxCol; c++) total += num(ws.getCell(r, c).value);

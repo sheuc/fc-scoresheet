@@ -310,10 +310,18 @@ export function analyzeImage(filename, shot) {
     if (alignmentEvidence(alt) > alignmentEvidence(shot) + 0.05) { src = alt; aligned = true; }
   }
   const a = analyzeShot(filename, src);
+  a.evidence = alignmentEvidence(src);       // how much it looks like a match screen at all (see MIN_LAYOUT_EVIDENCE)
   a.aspect = aspect;
   a.aligned_to_fit = aligned;
   return a;
 }
+
+/**
+ * A screenshot must show the match screen's fixed landmarks (see alignmentEvidence) before anything is read from it; without
+ * this, any image with green-ish rows (another screen, a rotated screenshot) produced "goals". Measured: all 113 real
+ * screenshots score >= 0.998, blank / rotated / wrong-screen / random images score <= 0.3.
+ */
+export const MIN_LAYOUT_EVIDENCE = 0.4;
 
 /** The width:height of the screenshots everything was tuned on. */
 export const REFERENCE_ASPECT = 2079 / 960;

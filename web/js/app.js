@@ -19,6 +19,9 @@ const ranks = (rows, value) => rows.map((r, i) => { let k = i; while (k > 0 && v
 // Whole numbers with separators; from 100,000 up, a short form (98.8M, 123K) so the number fits its tile on a phone.
 const big = n => (n >= 1e5 ? new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(n) : n.toLocaleString());
 
+// Rows of the top three ranks carry a medal (gold, silver, bronze); tied players share one.
+const medalAttr = r => (r <= 3 ? ` data-medal="${r}"` : "");
+
 const svg = d => `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 const ICONS = {
   trash: svg('<path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/>'),
@@ -159,6 +162,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const showError = msg => { errorBox.textContent = msg; errorBox.style.display = "block"; };
   const clearError = () => { errorBox.textContent = ""; errorBox.style.display = "none"; };
   const sheetMode = () => document.querySelector('input[name="sheetMode"]:checked').value;
+  const setSheetControls = busy => {
+    sheetFileInput.disabled = busy;
+    document.querySelectorAll('input[name="sheetMode"]').forEach(r => { r.disabled = busy; });
+  };
 
   // "Detect for me": the names box is ignored and an own-goal warning is shown
   detectBox.addEventListener("change", () => {
@@ -214,13 +221,20 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     return poolPromise;
   }
-  addEventListener("pagehide", () => { poolPromise?.then(p => p.terminate()).catch(() => {}); });
+  // Leaving the page stops the workers. The page can come back from the back/forward cache with this script's state intact
+  // (always on iOS Safari), so the dead pool must be forgotten: the next scan then builds a new one instead of hanging.
+  addEventListener("pagehide", () => { const old = poolPromise; poolPromise = null; old?.then(p => p.terminate()).catch(() => {}); });
 
   // ---- scan ----
   scanBtn.addEventListener("click", async () => {
     clearError();
     confirmContainer.innerHTML = "";
-    statsScan.innerHTML = ""; shareCard?.clearScan(); refreshStatsCard();
+    statsScan.innerHTML = ""; shareCard?.clearScan();
+    // The previous scan is being thrown away: the all-time panel and the Share card must stop including it ("Includes this
+    // scan") even if this scan fails or is cancelled. Back to the spreadsheet as it is on disk.
+    previewToken++;
+    if (sheetStats) showAllTimeStats(sheetStats, false, sheetScorers); else clearAllTimeStats();
+    refreshStatsCard();
     const namesInput = namesBox.value;
     const imageFiles = Array.from($("images").files || []);
     const detect = detectBox.checked;
@@ -244,6 +258,9 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     scanBtn.disabled = true;
+    // The spreadsheet is part of what this scan is checked against (goals already in it are skipped), so it can't be swapped
+    // or switched off until the scan ends; otherwise the skipped goals would be missing from a spreadsheet that never had them.
+    setSheetControls(true);
     try {
       let knownGoals = [];
       if (sheetMode() === "upload" && sheet) knownGoals = await readKnownGoals(sheet.bytes, sheet.name);
@@ -265,6 +282,7 @@ document.addEventListener("DOMContentLoaded", () => {
       resultsDiv.innerHTML = "";
     } finally {
       scanBtn.disabled = false;
+      setSheetControls(false);
     }
   });
 
@@ -302,12 +320,13 @@ document.addEventListener("DOMContentLoaded", () => {
     if (keys.length === 0) {
       html += `<tr><td class="empty-cell" colspan="${detect ? 4 : 3}">No goals found</td></tr>`;
     } else {
+      const medals = ranks(keys, k => counts[k]);
       keys.forEach((key, idx) => {
         const who = esc(capitalizeName(key));
         // Goals cell: a stepper. "-" subtracts a goal the user knows doesn't count (e.g. an own goal
         // credited to this player), "+" undoes that. The unit label ("goals") only shows on narrow
         // screens, where the header row is hidden and rows become cards (see styles.css).
-        html += `<tr data-idx="${idx}"><td>${who}</td>
+        html += `<tr data-idx="${idx}"${medalAttr(medals[idx])}><td>${who}</td>
                  <td><div class="stepper">
                    <button type="button" class="step-btn step-minus" aria-label="Subtract one goal from ${who}" title="Subtract a goal (e.g. an own goal)">${ICONS.minus}</button>
                    <span class="goal-count" aria-live="polite">${counts[key]}</span><span class="goal-unit">${counts[key] === 1 ? "goal" : "goals"}</span>
@@ -326,17 +345,27 @@ document.addEventListener("DOMContentLoaded", () => {
     const excluded = new Set();
     const reduced = {};
     const effective = key => counts[key] - (reduced[key] || 0);
+    // From the moment Save is pressed the table is read-only: the file being written holds exactly these numbers, so a
+    // later "-", trash or "Edit results" would make the screen disagree with the download. A failed save unlocks it.
+    let locked = false;
+    const setLocked = on => {
+      locked = on;
+      resultsDiv.querySelector(".results-table")?.classList.toggle("is-locked", on);     // on the table: a fresh element per scan
+      const edit = $("editBtn"); if (edit) edit.disabled = on;
+      resultsDiv.querySelectorAll("tbody tr[data-idx]").forEach(refreshRow);
+    };
     const refreshRow = row => {
       const key = keys[Number(row.dataset.idx)], removed = excluded.has(key), n = effective(key);
       row.querySelector(".goal-count").textContent = n;
       row.querySelector(".goal-unit").textContent = n === 1 ? "goal" : "goals";
-      row.querySelector(".step-minus").disabled = removed || n <= 0;
-      row.querySelector(".step-plus").disabled = removed || !reduced[key];
+      row.querySelector(".step-minus").disabled = locked || removed || n <= 0;
+      row.querySelector(".step-plus").disabled = locked || removed || !reduced[key];
       row.classList.toggle("is-removed", removed);
       row.classList.toggle("is-zero", !removed && n <= 0);
       row.classList.toggle("is-reduced", !removed && n > 0 && !!reduced[key]);
       const trash = row.querySelector(".delete-player");
       if (trash) {
+        trash.disabled = locked;
         const who = capitalizeName(key);
         trash.innerHTML = removed ? ICONS.undo : ICONS.trash;
         trash.classList.toggle("is-undo", removed);
@@ -370,14 +399,17 @@ document.addEventListener("DOMContentLoaded", () => {
         <div class="hint-text">After saving you'll get a downloadable updated file.</div>
         ${communityEnabled() ? `<label class="check community-opt"><input type="checkbox" id="communityOpt"${getOptIn() ? " checked" : ""}> <span>Add this scan to the community totals <span class="opt">(only player names and goal counts are sent, never screenshots or opponents)</span></span></label>` : ""}`;
       $("communityOpt")?.addEventListener("change", e => setOptIn(e.target.checked));
-      $("saveBtn").addEventListener("click", e => save(e.target, data, excluded, reduced));
-      $("editBtn").addEventListener("click", showConfirmStep);
+      // The Save button appears exactly where Confirm was, so the second click of a double-click on Confirm would land on it.
+      // A repeat click (click count 2+) in the first moments after it appears is ignored; a deliberate click is a first click.
+      const shownAt = performance.now();
+      $("saveBtn").addEventListener("click", e => { if (e.detail > 1 && performance.now() - shownAt < 700) return; save(e.currentTarget, data, excluded, reduced, setLocked); });
+      $("editBtn").addEventListener("click", () => { if (!locked) showConfirmStep(); });
       previewAllTime(data, excluded, reduced);
     };
     // On the table itself (a fresh element per scan), so listeners from earlier scans can't pile up.
     resultsDiv.querySelector(".results-table").addEventListener("click", ev => {
       const btn = ev.target.closest(".step-minus, .step-plus, .delete-player");
-      if (!btn || btn.disabled) return;
+      if (!btn || btn.disabled || locked) return;
       const row = btn.closest("tr"), key = keys[Number(row.dataset.idx)];
       if (btn.classList.contains("step-minus")) reduced[key] = Math.min(counts[key], (reduced[key] || 0) + 1);
       else if (btn.classList.contains("step-plus")) reduced[key] = Math.max(0, (reduced[key] || 0) - 1);
@@ -415,10 +447,11 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ---- save: record the goals in the user's spreadsheet and hand back the updated file ----
-  async function save(button, data, excluded, reduced) {
+  async function save(button, data, excluded, reduced, setLocked = () => {}) {
     clearError();
     const shareToCommunity = !!$("communityOpt")?.checked;     // read before the step's HTML is replaced
     button.disabled = true;
+    setLocked(true);                                          // the results above are read-only from here (see setLocked)
     previewToken++;                                           // a preview still being built must not overwrite the saved result
     try {
       const sheetBytes = sheetMode() === "upload" && sheet ? sheet.bytes : null;
@@ -433,7 +466,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const url = URL.createObjectURL(new Blob([out.xlsx], { type: XLSX_MIME }));
       let msg = `<p class="success-note">${ic("check")}Data saved. <a id="openLink" href="${url}" download="${esc(out.filename)}">Open/download updated file</a>. `
-              + `Keep it: upload it next time to carry on your totals and skip goals you've already recorded.</p>`;
+              + `Keep it: upload it next time to carry on your totals and skip goals you've already recorded. `
+              + `The results above are now locked to match the file; to scan more, choose new screenshots and press Start Scan.</p>`;
       if (out.notice) msg += `<div class="notice">${ic("info")}${esc(out.notice)}</div>`;
       if (skipped) msg += `<div class="notice">${ic("info")}${skipped} goal(s) were already recorded and not added again.</div>`;
       if (out.recorded_stats) msg += `<div class="notice">${ic("chart")}Match stats saved for ${out.recorded_stats} game(s).</div>`;
@@ -442,7 +476,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (out.sheet_totals.length) {
         totals = `<div class="totals-block"><h4 class="totals-title">Spreadsheet top scorers</h4>
           <table class="results-table"><thead><tr><th>Name</th><th>Total</th></tr></thead><tbody>
-          ${(rk => out.sheet_totals.map((r, i) => `<tr><td><span class="rank">${rk[i]}</span>${esc(capitalizeName(r.name))}</td><td data-label="${r.total === 1 ? "goal" : "goals"}">${r.total}</td></tr>`).join(""))(ranks(out.sheet_totals, r => r.total))}
+          ${(rk => out.sheet_totals.map((r, i) => `<tr${medalAttr(rk[i])}><td><span class="rank">${rk[i]}</span>${esc(capitalizeName(r.name))}</td><td data-label="${r.total === 1 ? "goal" : "goals"}">${r.total}</td></tr>`).join(""))(ranks(out.sheet_totals, r => r.total))}
           </tbody></table></div>`;
       }
       confirmContainer.innerHTML = `<div class="saved-msg">${msg}</div><p id="communityNote" class="hint-text" hidden></p>${totals}`;
@@ -452,6 +486,7 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (err) {
       showError(err.message || "Failed to save to spreadsheet.");
       button.disabled = false;
+      if (!confirmContainer.querySelector(".saved-msg")) setLocked(false);   // nothing was written, so editing is allowed again
     }
   }
 
@@ -480,7 +515,7 @@ document.addEventListener("DOMContentLoaded", () => {
           <div><strong>${big(t.goals)}</strong><span>Total goals</span></div>
           <div><strong>${big(t.games)}</strong><span>Total games</span></div></div>`
         + (none ? `<p class="cs-empty">${emptyMsg}</p>` : "")
-        + (top.length ? `<ol class="cs-top" aria-label="Top scorers">${top.map((r, i) => `<li><span class="rank">${rk[i]}</span><span class="cs-name">${esc(r.name)}</span><b>${Number(r.goals)}</b></li>`).join("")}</ol>` : "");
+        + (top.length ? `<ol class="cs-top" aria-label="Top scorers">${top.map((r, i) => `<li${medalAttr(rk[i])}><span class="rank">${rk[i]}</span><span class="cs-name">${esc(r.name)}</span><b>${Number(r.goals)}</b></li>`).join("")}</ol>` : "");
     }
     const avg = t.games ? (t.goals / t.games).toFixed(2) : "0.00";
     $("community-body").innerHTML = `<div class="community-tiles">
@@ -489,11 +524,25 @@ document.addEventListener("DOMContentLoaded", () => {
         <div class="community-tile"><strong>${avg}</strong><span>Goals per game</span></div></div>`
       + (t.scorers.length ? `<div class="totals-block"><h4 class="totals-title">Top scorers</h4>
           <table class="results-table"><thead><tr><th>Name</th><th>Goals</th></tr></thead><tbody>
-          ${t.scorers.map((r, i) => `<tr><td><span class="rank">${rk[i]}</span>${esc(r.name)}</td><td data-label="${r.goals === 1 ? "goal" : "goals"}">${Number(r.goals)}</td></tr>`).join("")}
+          ${t.scorers.map((r, i) => `<tr${medalAttr(rk[i])}><td><span class="rank">${rk[i]}</span>${esc(r.name)}</td><td data-label="${r.goals === 1 ? "goal" : "goals"}">${Number(r.goals)}</td></tr>`).join("")}
           </tbody></table></div>` : "")
       + (none ? `<p class="sub">${emptyMsg}</p>` : "");
   }
   refreshCommunity();
+
+  // ---- ask before leaving (refresh, pull to refresh, closing the tab) while there are results that haven't been saved ----
+  // Results are pending exactly while the Confirm or Save button is on screen: a new scan, a saved file or an empty scan removes
+  // them. The listener is only attached while that is so, so it doesn't stop the browser from keeping the page for Back
+  // (Firefox won't for a page with a beforeunload listener).
+  const warnLeave = e => { e.preventDefault(); e.returnValue = ""; };
+  let guarded = false;
+  const syncLeaveGuard = () => {
+    const pending = !!confirmContainer.querySelector("#confirmBtn:not(:disabled), #saveBtn");
+    if (pending && !guarded) addEventListener("beforeunload", warnLeave);
+    else if (!pending && guarded) removeEventListener("beforeunload", warnLeave);
+    guarded = pending;
+  };
+  new MutationObserver(syncLeaveGuard).observe(confirmContainer, { childList: true, subtree: true, attributes: true, attributeFilter: ["disabled"] });
 
   // ---- offline support ----
   if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {

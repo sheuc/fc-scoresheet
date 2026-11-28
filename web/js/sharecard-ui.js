@@ -86,6 +86,7 @@ export function initShareCard() {
   const editing = () => !editor.hidden;
   function mirror() {
     const c = editCanvas.getContext("2d");
+    if (!c) return;
     c.clearRect(0, 0, editCanvas.width, editCanvas.height);
     c.drawImage(canvas, 0, 0);
   }
@@ -98,8 +99,15 @@ export function initShareCard() {
     await loadCardFonts();
     if (mine !== token) return;
     canvas.width = CARD_W; canvas.height = CARD_H;
-    const { model, report, asked, shown, trimmed } = drawFitted(canvas.getContext("2d"),
-      { title: state.title, name: state.name, stats: cur.stats, scorers: cur.scorers, scorerCount: state.scorers, selected: state.selected, source: state.source, theme: state.theme, dateText: today() });
+    // Some privacy settings and extensions switch canvas drawing off. Say so, instead of leaving a blank card and dead buttons.
+    const cannot = text => { state.blob = null; note.textContent = text; ["card-download", "card-share", "card-copy"].forEach(id => { $(id).disabled = true; }); };
+    const ctx = canvas.getContext("2d");
+    if (!ctx) { cannot("This browser is blocking the drawing the card needs (a privacy setting or an extension?), so the card can't be made here."); return; }
+    let drawn;
+    try {
+      drawn = drawFitted(ctx, { title: state.title, name: state.name, stats: cur.stats, scorers: cur.scorers, scorerCount: state.scorers, selected: state.selected, source: state.source, theme: state.theme, dateText: today() });
+    } catch { cannot("Couldn't draw the card."); return; }
+    const { model, report, asked, shown, trimmed } = drawn;
     canvas.dataset.title = model.title; canvas.dataset.tiles = model.tiles.map(t => t.key).join(","); canvas.dataset.source = state.source; canvas.dataset.scorers = String(model.scorers.length);
     canvas.dataset.overflow = report.overflow.join("; "); canvas.dataset.trimmed = trimmed ? "1" : "";
     note.textContent = trimmed ? `Only ${shown} of the ${asked} scorers fit with this title and ${model.tiles.length} stats. Shorten the title or pick fewer stats to fit more.`
@@ -207,29 +215,41 @@ export function initShareCard() {
   const toPhotos = touch && sheetExists;
   const saveWord = toPhotos ? "Save to Photos" : touch ? "Save to device" : "Download";
   if (touch) { const b = $("card-download"); if (b.lastChild && b.lastChild.nodeType === 3) b.lastChild.textContent = ` ${saveWord}`; }
-  function downloadFile() {
-    const url = URL.createObjectURL(state.blob), a = document.createElement("a");
-    a.href = url; a.download = state.fileName; document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  function downloadFile() {                      // true when the browser accepted the file
+    try {
+      const url = URL.createObjectURL(state.blob), a = document.createElement("a");
+      a.href = url; a.download = state.fileName; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      return true;
+    } catch { return false; }
   }
+  let saving = false;                            // a double-click is one save, not two files (or a share sheet opened twice)
   $("card-download").addEventListener("click", async () => {
-    if (!state.blob) return;
-    if (toPhotos && canShare()) {
-      note.textContent = "In the sheet that opens, choose Save Image to add the card to Photos.";
-      try { await navigator.share({ files: [fileOf()], title: canvas.dataset.title }); note.textContent = "Done. If you chose Save Image, the card is in Photos."; return; }
-      catch (e) {
-        if (e?.name === "AbortError") { note.textContent = ""; return; }                    // closed the sheet: not an error
-        note.textContent = "Couldn't open the share sheet, so the card was saved as a file instead.";
+    if (!state.blob || saving) return;
+    saving = true;
+    try {
+      let said = touch ? "Saved to your device." : "Saved to your downloads.";
+      if (toPhotos && canShare()) {
+        note.textContent = "In the sheet that opens, choose Save Image to add the card to Photos.";
+        try { await navigator.share({ files: [fileOf()], title: canvas.dataset.title }); note.textContent = "Done. If you chose Save Image, the card is in Photos."; return; }
+        catch (e) {
+          if (e?.name === "AbortError") { note.textContent = ""; return; }                  // closed the sheet: not an error
+          said = "Couldn't open the share sheet, so the card was saved as a file instead.";
+        }
       }
-    } else note.textContent = touch ? "Saved to your device." : "Saved to your downloads.";
-    downloadFile();
+      note.textContent = downloadFile() ? said : "Couldn't save the file in this browser. Take a screenshot of the card instead.";
+      await new Promise(r => setTimeout(r, 800));
+    } finally { saving = false; }
   });
   $("card-share").hidden = !sheetExists || toPhotos;                  // on a phone the save button already opens the share sheet
+  let sharing = false;                           // a second tap while the sheet is open is ignored, not reported as a failure
   $("card-share").addEventListener("click", async () => {
-    if (!state.blob) return;
+    if (!state.blob || sharing) return;
     if (!canShare()) { note.textContent = `Sharing isn't available here. Use ${saveWord} instead.`; return; }
+    sharing = true;
     try { await navigator.share({ files: [fileOf()], title: canvas.dataset.title }); }
     catch (e) { if (e?.name !== "AbortError") note.textContent = `Couldn't open the share sheet. Use ${saveWord} instead.`; }
+    finally { sharing = false; }
   });
   $("card-copy").hidden = !(navigator.clipboard && typeof navigator.clipboard.write === "function" && typeof ClipboardItem === "function");
   $("card-copy").addEventListener("click", async () => {

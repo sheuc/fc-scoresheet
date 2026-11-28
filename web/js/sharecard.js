@@ -12,6 +12,7 @@ import { capitalizeName } from "./text.js";
 export const CARD_W = 1080, CARD_H = 1350;
 export const DEFAULT_TITLE = "My FC Mobile Season";
 export const TITLE_MAX = 40, NAME_MAX = 24;
+const MAX_SCORER_NAME = 60;              // a longer scorer name (from a spreadsheet) could never be shown anyway and made fitting it very slow
 export const MIN_STATS = 3, MAX_STATS = 6;
 export const MIN_SCORERS = 1, DEFAULT_SCORERS = 5, MAX_SCORERS = 8;          // how many top scorers the card lists (the user's choice)
 export const DEFAULT_STATS = ["played", "winRate", "goalsFor", "record"];
@@ -55,7 +56,7 @@ export function statAvailability(stats) {
   });
 }
 
-const clean = (text, max) => String(text ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, max).trim();
+const clean = (text, max) => Array.from(String(text ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim()).slice(0, max).join("").trim();
 
 /**
  * Everything the card shows, decided and sanitised.
@@ -78,7 +79,7 @@ export function buildCardModel({ title, name, stats, scorers = [], scorerCount =
     return { key: k, label: c.label, ...c.get(stats) };
   });
   const ranked = scorers.filter(s => s && s.name && s.goals > 0)
-    .map(s => ({ name: capitalizeName(String(s.name)), goals: Math.round(s.goals) }))
+    .map(s => ({ name: capitalizeName(Array.from(String(s.name)).slice(0, MAX_SCORER_NAME).join("")), goals: Math.round(s.goals) }))
     .sort((a, b) => (b.goals - a.goals) || a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
   return {
     title: clean(title, TITLE_MAX) || DEFAULT_TITLE,
@@ -102,11 +103,13 @@ const PALETTES = {
     bg0: "#060b17", bg1: "#101c36", glowA: "rgba(0,255,135,0.22)", glowB: "rgba(70,130,255,0.26)", ring: "rgba(255,255,255,0.045)",
     panel: "rgba(255,255,255,0.065)", panelEdge: "rgba(255,255,255,0.11)", text: "#f3f7ff", muted: "#97a8c6",
     accent: "#00ff87", accent2: "#12d6c0", accentInk: "#04150c",
+    gold: ["#ffe27a", "#f2b705"], goldInk: "#1d1500", silver: { tint: "rgba(195,204,217,0.16)", num: "#c3ccd9" }, bronze: { tint: "rgba(224,149,90,0.18)", num: "#e0955a" },
   },
   light: {
     bg0: "#f5f8fd", bg1: "#e3ebf8", glowA: "rgba(0,190,110,0.20)", glowB: "rgba(70,130,255,0.18)", ring: "rgba(15,27,51,0.05)",
     panel: "rgba(255,255,255,0.92)", panelEdge: "rgba(15,27,51,0.10)", text: "#0e1a33", muted: "#5b6d8a",
     accent: "#00995e", accent2: "#00b97d", accentInk: "#ffffff",
+    gold: ["#f8d35a", "#e0a100"], goldInk: "#1d1500", silver: { tint: "rgba(107,122,144,0.15)", num: "#5b6b82" }, bronze: { tint: "rgba(162,96,42,0.15)", num: "#94561f" },
   },
 };
 
@@ -127,9 +130,10 @@ function fitSize(ctx, text, weight, max, min, maxW) {
 }
 function ellipsize(ctx, text, weight, size, maxW) {
   if (width(ctx, text, weight, size) <= maxW) return text;
-  let t = text;
-  while (t.length > 1 && width(ctx, `${t}…`, weight, size) > maxW) t = t.slice(0, -1);
-  return `${t.trimEnd()}…`;
+  const cs = Array.from(text);                                   // by character (an emoji is one), and a binary search: each probe measures the whole string
+  let lo = 1, hi = cs.length;
+  while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (width(ctx, `${cs.slice(0, mid).join("")}…`, weight, size) <= maxW) lo = mid; else hi = mid - 1; }
+  return `${cs.slice(0, lo).join("").trimEnd()}…`;
 }
 /** Text with letter spacing (canvas letterSpacing isn't everywhere). Returns its width. */
 function tracked(ctx, text, x, y, spacing, align = "left") {
@@ -231,13 +235,17 @@ export function renderCard(ctx, model, w = CARD_W, h = CARD_H) {
   const leader = n ? model.scorers[0].goals : 0;
   const fs = Math.max(0.7, Math.min(1, rowH / 72));                                              // text in tight rows scales down with them
   model.scorers.forEach((s, i) => {
-    const top = panelTop + 70 + i * rowH, cy = top + rowH / 2, first = s.goals === leader;      // every tied leader is highlighted
-    if (first) {
-      const g = ctx.createLinearGradient(M + 14, 0, w - M - 14, 0); g.addColorStop(0, P.accent2); g.addColorStop(1, P.accent);
-      roundRect(ctx, M + 14, top + 4, CW - 28, rowH - 8, 22); ctx.fillStyle = g; ctx.fill();
-    }
-    const ink = first ? P.accentInk : P.text, soft = first ? P.accentInk : P.muted;
+    const top = panelTop + 70 + i * rowH, cy = top + rowH / 2;
     const rank = 1 + model.scorers.filter(x => x.goals > s.goals).length;                         // tied scorers share a rank: 1, 1, 3
+    const first = rank === 1;                                                                    // every tied leader gets gold
+    const medal = rank === 2 ? P.silver : rank === 3 ? P.bronze : null;
+    if (first) {
+      const g = ctx.createLinearGradient(M + 14, 0, w - M - 14, 0); g.addColorStop(0, P.gold[0]); g.addColorStop(1, P.gold[1]);
+      roundRect(ctx, M + 14, top + 4, CW - 28, rowH - 8, 22); ctx.fillStyle = g; ctx.fill();
+    } else if (medal) {                                                                          // silver and bronze: a soft tint behind the row
+      roundRect(ctx, M + 14, top + 4, CW - 28, rowH - 8, 22); ctx.fillStyle = medal.tint; ctx.fill();
+    }
+    const ink = first ? P.goldInk : P.text, soft = first ? P.goldInk : medal ? medal.num : P.muted;
     ctx.font = font(800, 34 * fs); ctx.fillStyle = soft; ctx.fillText(String(rank), M + 44, cy + 12 * fs);
     const nameX = M + 44 + 64, nameW = CW - 44 - 64 - 44 - 120;
     const ns = fitSize(ctx, s.name, 700, 38 * fs, 20, nameW);

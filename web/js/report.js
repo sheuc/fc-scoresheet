@@ -26,22 +26,48 @@ function details() {
   ].join("\n");
 }
 
-// Sends one report. Resolves true when the form service accepted it.
+const MAX_TEXT = 2000;            // the textarea's maxlength only limits typing; this limits what is sent
+const TIMEOUT_MS = 15000;
+const EMAIL_OK = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const cut = (s, n) => Array.from(s).slice(0, n).join("");          // by character, never through the middle of an emoji
+
+// What to tell the user for each way a send can end (the form service's own wording is never shown).
+const MESSAGES = {
+  network: "Couldn't send the report. Check your connection and try again.",
+  timeout: "The report took too long to send. Check your connection and try again.",
+  busy: "The report service is busy right now. Wait a minute and try again.",
+  server: "The report service had a problem. Try again in a little while.",
+  rejected: "The report wasn't accepted. If you gave an email address, check that it's right, then try again.",
+  unexpected: "The report didn't reach the service. The connection may need a sign-in page first (public wifi, for example). Try again once you're online.",
+  email: "That email address doesn't look right. Fix it, or clear the box to send without one.",
+};
+
+// Sends one report. Resolves "ok", or the name of what went wrong (a key of MESSAGES). Never throws.
 async function sendReport(key, text, email, withDetails) {
-  const first = text.trim().split("\n")[0].slice(0, 70);
-  const res = await fetch(ENDPOINT, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({
-      access_key: key,
-      subject: `FC Scoresheet bug: ${first}`,
-      from_name: "FC Scoresheet",
-      message: text.trim() + (withDetails ? `\n\n---\n${details()}` : ""),
-      ...(email ? { email } : {}),
-    }),
-  });
-  const data = await res.json().catch(() => ({}));
-  return res.ok && data.success !== false;
+  text = cut(text.trim(), MAX_TEXT);
+  const first = cut(text.split("\n")[0], 70);
+  const abort = new AbortController(), timer = setTimeout(() => abort.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      signal: abort.signal,
+      body: JSON.stringify({
+        access_key: key,
+        subject: `FC Scoresheet bug: ${first}`,
+        from_name: "FC Scoresheet",
+        message: text + (withDetails ? `\n\n---\n${details()}` : ""),
+        ...(email ? { email } : {}),
+      }),
+    });
+    if (res.status === 429) return "busy";
+    if (res.status >= 500) return "server";
+    const data = await res.json().catch(() => null);
+    if (!data || typeof data !== "object") return "unexpected";      // HTTP 200 with a page that isn't the service's answer
+    return res.ok && data.success === true ? "ok" : "rejected";
+  } catch (e) {
+    return e && e.name === "AbortError" ? "timeout" : "network";
+  } finally { clearTimeout(timer); }
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -50,12 +76,14 @@ document.addEventListener("DOMContentLoaded", () => {
   if (!dialog || !open) return;
   if (!key) { opens.forEach(b => { b.hidden = true; }); return; }                       // not set up yet: no link rather than a broken one
   const text = $("report-text"), email = $("report-email"), include = $("report-include"), shown = $("report-details");
-  const send = $("report-send"), trap = $("report-website"), status = $("report-status"), form = $("report-form"), done = $("report-done");
+  const send = $("report-send"), trap = $("report-ref"), status = $("report-status"), form = $("report-form"), done = $("report-done");
   let opener = null, busy = false;
 
   const refresh = () => { send.disabled = busy || !text.value.trim(); shown.hidden = !include.checked; shown.textContent = details(); };
   function show() {
-    opener = document.activeElement; status.textContent = ""; form.hidden = false; done.hidden = true; refresh();
+    opener = document.activeElement; status.textContent = ""; form.hidden = false; done.hidden = true;
+    trap.value = "";              // an autofill that once filled the hidden field must not make every later report vanish
+    refresh();
     dialog.hidden = false; document.body.classList.add("editing");
     text.focus();
   }
@@ -72,15 +100,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
   send.addEventListener("click", async () => {
     if (busy || !text.value.trim()) return;
+    const mail = email.value.trim();
+    if (mail && (mail.length > 254 || !EMAIL_OK.test(mail))) { status.textContent = MESSAGES.email; email.focus(); return; }
     busy = true; send.textContent = "Sending..."; status.textContent = ""; refresh();
-    let ok = false;
-    try { ok = trap.value ? true : await sendReport(key, text.value, email.value.trim(), include.checked); }   // a filled hidden field is a bot: pretend it worked
-    catch { ok = false; }
+    const result = trap.value ? "ok" : await sendReport(key, text.value, mail, include.checked);   // a filled hidden field is a bot: pretend it worked
     busy = false; send.textContent = "Send report";
-    if (ok) {
+    if (result === "ok") {
       text.value = ""; form.hidden = true; done.hidden = false; $("report-close").focus();
     } else {
-      status.textContent = "Couldn't send the report. Check your connection and try again."; refresh();
+      status.textContent = MESSAGES[result] || MESSAGES.network; refresh();
     }
   });
 
